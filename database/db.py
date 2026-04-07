@@ -99,9 +99,129 @@ class DatabaseManager:
             )
         ''')
         
+        # ── Channels table (multi-channel support) ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL UNIQUE,
+                channel_name TEXT,
+                is_default INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # ── Thumbnail A/B testing ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS thumbnail_tests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id INTEGER NOT NULL,
+                variant_label TEXT NOT NULL,
+                thumbnail_path TEXT,
+                impressions INTEGER DEFAULT 0,
+                clicks INTEGER DEFAULT 0,
+                ctr REAL DEFAULT 0.0,
+                is_active INTEGER DEFAULT 0,
+                is_winner INTEGER DEFAULT 0,
+                started_at DATETIME,
+                ended_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        ''')
+
+        # ── Scheduled uploads queue ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scheduled_uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                description TEXT,
+                scheduled_at DATETIME NOT NULL,
+                channel_id TEXT,
+                is_short INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'queued',
+                video_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        ''')
+
+        # ── Competitor channels tracking ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS competitor_channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL UNIQUE,
+                channel_name TEXT,
+                subscriber_count INTEGER DEFAULT 0,
+                video_count INTEGER DEFAULT 0,
+                last_video_date DATETIME,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # ── Competitor video snapshots ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS competitor_videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                competitor_channel_id INTEGER NOT NULL,
+                youtube_video_id TEXT NOT NULL,
+                title TEXT,
+                views INTEGER DEFAULT 0,
+                likes INTEGER DEFAULT 0,
+                comments INTEGER DEFAULT 0,
+                published_at DATETIME,
+                tags TEXT,
+                snapshot_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (competitor_channel_id) REFERENCES competitor_channels(id)
+            )
+        ''')
+
+        # ── Content plans (AI planner) ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS content_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                niche TEXT,
+                outline TEXT,
+                keywords TEXT,
+                target_date DATE,
+                status TEXT DEFAULT 'idea',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # ── Notifications / alerts ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT,
+                is_read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # ── SEO audit log ──
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS seo_audits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id INTEGER,
+                title_score REAL DEFAULT 0,
+                desc_score REAL DEFAULT 0,
+                tags_score REAL DEFAULT 0,
+                overall_score REAL DEFAULT 0,
+                recommendations TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        ''')
+
         conn.commit()
         conn.close()
-    
+
     def add_video(self, file_path: str, description: str) -> int:
         """Add new video to database"""
         conn = self.get_connection()
@@ -377,6 +497,246 @@ class DatabaseManager:
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
+
+    # ── Channels ─────────────────────────────────────────────────
+
+    def add_channel(self, channel_id: str, channel_name: str, is_default: int = 0) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('INSERT OR IGNORE INTO channels (channel_id, channel_name, is_default) VALUES (?,?,?)',
+                    (channel_id, channel_name, is_default))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_all_channels(self) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM channels ORDER BY is_default DESC, channel_name')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    def delete_channel(self, channel_id: str):
+        conn = self.get_connection()
+        conn.execute('DELETE FROM channels WHERE channel_id = ?', (channel_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Thumbnail tests ───────────────────────────────────────────
+
+    def add_thumbnail_test(self, video_id: int, variant_label: str, thumbnail_path: str) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO thumbnail_tests (video_id, variant_label, thumbnail_path, started_at)
+                       VALUES (?,?,?,?)''',
+                    (video_id, variant_label, thumbnail_path, datetime.now().isoformat()))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_thumbnail_tests(self, video_id: int) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM thumbnail_tests WHERE video_id = ? ORDER BY created_at', (video_id,))
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    def get_all_thumbnail_tests(self) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT t.*, v.title_used FROM thumbnail_tests t LEFT JOIN videos v ON t.video_id=v.id ORDER BY t.created_at DESC')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    # ── Scheduled uploads ─────────────────────────────────────────
+
+    def add_scheduled_upload(self, file_path: str, description: str, scheduled_at: str,
+                             channel_id: str = None, is_short: int = 0) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO scheduled_uploads (file_path, description, scheduled_at, channel_id, is_short)
+                       VALUES (?,?,?,?,?)''',
+                    (file_path, description, scheduled_at, channel_id, is_short))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_scheduled_uploads(self, status: str = None) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        if status:
+            cur.execute('SELECT * FROM scheduled_uploads WHERE status=? ORDER BY scheduled_at', (status,))
+        else:
+            cur.execute('SELECT * FROM scheduled_uploads ORDER BY scheduled_at')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    def update_scheduled_status(self, upload_id: int, status: str, video_id: int = None):
+        conn = self.get_connection()
+        if video_id:
+            conn.execute('UPDATE scheduled_uploads SET status=?, video_id=? WHERE id=?', (status, video_id, upload_id))
+        else:
+            conn.execute('UPDATE scheduled_uploads SET status=? WHERE id=?', (status, upload_id))
+        conn.commit()
+        conn.close()
+
+    def delete_scheduled_upload(self, upload_id: int):
+        conn = self.get_connection()
+        conn.execute('DELETE FROM scheduled_uploads WHERE id=?', (upload_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Competitor channels ───────────────────────────────────────
+
+    def add_competitor_channel(self, channel_id: str, channel_name: str) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('INSERT OR IGNORE INTO competitor_channels (channel_id, channel_name) VALUES (?,?)',
+                    (channel_id, channel_name))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_all_competitor_channels(self) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM competitor_channels ORDER BY channel_name')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    def delete_competitor_channel(self, channel_id: str):
+        conn = self.get_connection()
+        conn.execute('DELETE FROM competitor_videos WHERE competitor_channel_id IN (SELECT id FROM competitor_channels WHERE channel_id=?)', (channel_id,))
+        conn.execute('DELETE FROM competitor_channels WHERE channel_id=?', (channel_id,))
+        conn.commit()
+        conn.close()
+
+    def add_competitor_video(self, competitor_channel_id: int, youtube_video_id: str,
+                             title: str, views: int, likes: int, comments: int,
+                             published_at: str, tags: str) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO competitor_videos
+                       (competitor_channel_id, youtube_video_id, title, views, likes, comments, published_at, tags)
+                       VALUES (?,?,?,?,?,?,?,?)''',
+                    (competitor_channel_id, youtube_video_id, title, views, likes, comments, published_at, tags))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_competitor_videos(self, competitor_channel_id: int, limit: int = 50) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM competitor_videos WHERE competitor_channel_id=? ORDER BY snapshot_date DESC LIMIT ?',
+                    (competitor_channel_id, limit))
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    # ── Content plans ─────────────────────────────────────────────
+
+    def add_content_plan(self, title: str, niche: str, outline: str,
+                         keywords: str, target_date: str = None, status: str = 'idea') -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO content_plans (title, niche, outline, keywords, target_date, status)
+                       VALUES (?,?,?,?,?,?)''',
+                    (title, niche, outline, keywords, target_date, status))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_all_content_plans(self) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM content_plans ORDER BY created_at DESC')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    def update_content_plan_status(self, plan_id: int, status: str):
+        conn = self.get_connection()
+        conn.execute('UPDATE content_plans SET status=?, updated_at=? WHERE id=?',
+                     (status, datetime.now().isoformat(), plan_id))
+        conn.commit()
+        conn.close()
+
+    def delete_content_plan(self, plan_id: int):
+        conn = self.get_connection()
+        conn.execute('DELETE FROM content_plans WHERE id=?', (plan_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Notifications ─────────────────────────────────────────────
+
+    def add_notification(self, ntype: str, title: str, message: str = "") -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('INSERT INTO notifications (type, title, message) VALUES (?,?,?)',
+                    (ntype, title, message))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_notifications(self, unread_only: bool = False, limit: int = 50) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        if unread_only:
+            cur.execute('SELECT * FROM notifications WHERE is_read=0 ORDER BY created_at DESC LIMIT ?', (limit,))
+        else:
+            cur.execute('SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?', (limit,))
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    def mark_notification_read(self, notification_id: int):
+        conn = self.get_connection()
+        conn.execute('UPDATE notifications SET is_read=1 WHERE id=?', (notification_id,))
+        conn.commit()
+        conn.close()
+
+    def clear_notifications(self):
+        conn = self.get_connection()
+        conn.execute('DELETE FROM notifications')
+        conn.commit()
+        conn.close()
+
+    # ── SEO audits ────────────────────────────────────────────────
+
+    def add_seo_audit(self, video_id: int, title_score: float, desc_score: float,
+                      tags_score: float, overall_score: float, recommendations: str) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO seo_audits (video_id, title_score, desc_score, tags_score, overall_score, recommendations)
+                       VALUES (?,?,?,?,?,?)''',
+                    (video_id, title_score, desc_score, tags_score, overall_score, recommendations))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_seo_audits(self, video_id: int = None) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        if video_id:
+            cur.execute('SELECT * FROM seo_audits WHERE video_id=? ORDER BY created_at DESC', (video_id,))
+        else:
+            cur.execute('SELECT a.*, v.title_used FROM seo_audits a LEFT JOIN videos v ON a.video_id=v.id ORDER BY a.created_at DESC')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
 
     def close(self):
         """Close database connection - no-op now since we use per-call connections"""
