@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from typing import List, Dict, Optional
 from datetime import datetime
 from pathlib import Path
