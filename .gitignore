@@ -2,3 +2,5 @@ config/
 credentials/
 *.pickle
 data/*.db
+__pycache__/
+*.pyc
