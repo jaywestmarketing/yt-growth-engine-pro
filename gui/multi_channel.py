@@ -5,213 +5,414 @@ Copyright © 2024 RealE Technology Solutions. All rights reserved.
 
 import customtkinter as ctk
 from tkinter import ttk, messagebox
-from gui.tooltip import under_construction_badge
+
 from database.db import DatabaseManager
+from gui.tooltip import under_construction_badge
 
 
 class MultiChannelTab:
+    """Manage multiple YouTube channels from a single interface.
+
+    Channels are persisted in the database.  Per-channel video stats are
+    shown as a placeholder because the videos table does not yet carry a
+    channel_id foreign key.
+    """
+
     def __init__(self, parent, theme_config, app):
         self.parent = parent
         self.theme = theme_config
         self.app = app
         self.db = DatabaseManager()
 
-        self._create_ui()
+        self._channels_tree = None
+        self._switcher_var = ctk.StringVar(value="-- select channel --")
 
-    def _create_ui(self):
-        main = ctk.CTkFrame(self.parent, fg_color="transparent")
-        main.pack(fill="both", expand=True, padx=20, pady=20)
-        t = self.theme
+        self.create_tab()
 
-        # ── Header ───────────────────────────────────────────────
-        header = ctk.CTkFrame(main, fg_color=t["bg_secondary"], corner_radius=10)
-        header.pack(fill="x", pady=(0, 20))
+    # ── Main layout ───────────────────────────────────────────────
 
-        ctk.CTkLabel(
-            header, text="Multi-Channel Management",
-            font=(t["font_family"], t["font_size_heading"], "bold"),
-            text_color=t["text_primary"]
-        ).pack(side="left", padx=20, pady=15)
+    def create_tab(self):
+        main_frame = ctk.CTkFrame(self.parent, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        badge = under_construction_badge(header, t)
-        badge.pack(side="left", pady=15)
+        self._create_header(main_frame)
 
-        ctk.CTkButton(
-            header, text="↻ Refresh", width=100, height=32,
-            font=(t["font_family"], t["font_size_body"]),
-            fg_color=t["accent"], hover_color=t["accent_hover"],
-            text_color="#FFFFFF", corner_radius=8,
-            command=self.refresh
-        ).pack(side="right", padx=20, pady=15)
+        scroll = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
 
-        # ── Active channel selector ──────────────────────────────
-        selector_frame = ctk.CTkFrame(main, fg_color=t["bg_secondary"], corner_radius=10)
-        selector_frame.pack(fill="x", pady=(0, 20))
+        self._create_channel_switcher(scroll)
+        self._create_add_form(scroll)
+        self._create_channels_list(scroll)
+        self._create_action_buttons(scroll)
+        self._create_per_channel_stats(scroll)
+
+        self.refresh_channels()
+
+    # ── Header ────────────────────────────────────────────────────
+
+    def _create_header(self, parent):
+        bar = ctk.CTkFrame(parent, fg_color="transparent", height=40)
+        bar.pack(fill="x", pady=(0, 10))
 
         ctk.CTkLabel(
-            selector_frame, text="Active Channel:",
-            font=(t["font_family"], t["font_size_body"], "bold"),
-            text_color=t["text_primary"]
-        ).pack(side="left", padx=20, pady=12)
-
-        self.channel_selector = ctk.CTkOptionMenu(
-            selector_frame, values=["(no channels)"],
-            fg_color=t["button_bg"], button_color=t["accent"],
-            button_hover_color=t["accent_hover"],
-            text_color=t["text_primary"],
-            font=(t["font_family"], t["font_size_body"]), width=300
-        )
-        self.channel_selector.pack(side="left", padx=10, pady=12)
-
-        # ── Add channel form ─────────────────────────────────────
-        form_frame = ctk.CTkFrame(main, fg_color=t["bg_secondary"], corner_radius=10)
-        form_frame.pack(fill="x", pady=(0, 20))
-
-        ctk.CTkLabel(
-            form_frame, text="Add Channel",
-            font=(t["font_family"], t["font_size_body"], "bold"),
-            text_color=t["text_primary"]
-        ).pack(anchor="w", padx=20, pady=(15, 10))
-
-        row = ctk.CTkFrame(form_frame, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=(0, 15))
-
-        ctk.CTkLabel(row, text="Channel ID:", width=90, anchor="w",
-                     font=(t["font_family"], t["font_size_small"]),
-                     text_color=t["text_secondary"]).pack(side="left")
-        self.channel_id_entry = ctk.CTkEntry(
-            row, width=220, placeholder_text="UC...",
-            fg_color=t["bg_tertiary"], text_color=t["text_primary"],
-            font=(t["font_family"], t["font_size_body"])
-        )
-        self.channel_id_entry.pack(side="left", padx=(0, 15))
-
-        ctk.CTkLabel(row, text="Name:", width=50, anchor="w",
-                     font=(t["font_family"], t["font_size_small"]),
-                     text_color=t["text_secondary"]).pack(side="left")
-        self.channel_name_entry = ctk.CTkEntry(
-            row, width=200, placeholder_text="My Channel",
-            fg_color=t["bg_tertiary"], text_color=t["text_primary"],
-            font=(t["font_family"], t["font_size_body"])
-        )
-        self.channel_name_entry.pack(side="left", padx=(0, 15))
-
-        self.default_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
-            row, text="Default", variable=self.default_var,
-            font=(t["font_family"], t["font_size_small"]),
-            text_color=t["text_secondary"]
-        ).pack(side="left", padx=(0, 15))
-
-        ctk.CTkButton(
-            row, text="Add Channel", width=120, height=32,
-            font=(t["font_family"], t["font_size_body"]),
-            fg_color=t["accent"], hover_color=t["accent_hover"],
-            text_color="#FFFFFF", corner_radius=8,
-            command=self._add_channel
+            bar,
+            text="Multi-Channel Management",
+            font=(self.theme["font_family"], self.theme["font_size_heading"], "bold"),
+            text_color=self.theme["text_primary"],
+            anchor="w",
         ).pack(side="left")
 
-        # ── Channels table ───────────────────────────────────────
-        table_frame = ctk.CTkFrame(main, fg_color=t["bg_secondary"], corner_radius=10)
-        table_frame.pack(fill="both", expand=True, pady=(0, 15))
-
-        ctk.CTkLabel(
-            table_frame, text="Registered Channels",
-            font=(t["font_family"], t["font_size_body"], "bold"),
-            text_color=t["text_primary"]
-        ).pack(anchor="w", padx=20, pady=(15, 10))
-
-        style = ttk.Style()
-        style.configure("MC.Treeview", background=t["bg_tertiary"],
-                        foreground=t["text_primary"], fieldbackground=t["bg_tertiary"],
-                        borderwidth=0, font=(t["font_family"], 12))
-        style.configure("MC.Treeview.Heading", background=t["bg_secondary"],
-                        foreground=t["text_primary"], borderwidth=0,
-                        font=(t["font_family"], 12, "bold"))
-
-        cols = ("Name", "Channel ID", "Default")
-        self.tree = ttk.Treeview(table_frame, columns=cols, show="headings",
-                                 style="MC.Treeview", height=6)
-        for c in cols:
-            self.tree.heading(c, text=c)
-        self.tree.column("Name", width=250)
-        self.tree.column("Channel ID", width=280)
-        self.tree.column("Default", width=80)
-        self.tree.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-
-        # ── Actions ──────────────────────────────────────────────
-        actions = ctk.CTkFrame(main, fg_color="transparent")
-        actions.pack(fill="x")
+        badge = under_construction_badge(
+            bar, self.theme,
+            text="Multi-channel features are partially implemented. "
+                 "Per-channel video stats require a schema migration.",
+        )
+        badge.pack(side="left", padx=(8, 0))
 
         ctk.CTkButton(
-            actions, text="Remove Channel", height=40,
-            font=(t["font_family"], t["font_size_body"]),
-            fg_color=t["error"], hover_color=t["error"],
-            text_color="#FFFFFF", corner_radius=8,
-            command=self._remove_channel
-        ).pack(side="left", padx=(0, 10))
+            bar,
+            text="\u21bb Refresh",
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            fg_color=self.theme["accent"],
+            hover_color=self.theme["accent_hover"],
+            text_color="#FFFFFF",
+            width=100, height=32, corner_radius=8,
+            command=self.refresh_channels,
+        ).pack(side="right")
+
+    # ── Channel switcher ──────────────────────────────────────────
+
+    def _create_channel_switcher(self, parent):
+        frame = ctk.CTkFrame(parent, fg_color=self.theme["bg_secondary"], corner_radius=10)
+        frame.pack(fill="x", pady=(0, 16))
 
         ctk.CTkLabel(
-            actions,
-            text="Note: videos table does not yet have a channel_id column — per-channel stats coming soon.",
-            font=(t["font_family"], t["font_size_small"]),
-            text_color=t["text_tertiary"], wraplength=500, anchor="w"
-        ).pack(side="left", padx=10)
+            frame, text="Active Channel",
+            font=(self.theme["font_family"], self.theme["font_size_heading"], "bold"),
+            text_color=self.theme["text_primary"],
+        ).pack(anchor="w", padx=16, pady=(16, 8))
 
-        self._load_channels()
+        row = ctk.CTkFrame(frame, fg_color="transparent")
+        row.pack(fill="x", padx=16, pady=(0, 16))
 
-    # ── Data ─────────────────────────────────────────────────────
+        ctk.CTkLabel(
+            row, text="Switch to:",
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            text_color=self.theme["text_secondary"],
+        ).pack(side="left", padx=(0, 8))
 
-    def _load_channels(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        self._switcher_combo = ctk.CTkComboBox(
+            row,
+            variable=self._switcher_var,
+            values=["-- select channel --"],
+            width=320,
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            state="readonly",
+            command=self._on_channel_switch,
+        )
+        self._switcher_combo.pack(side="left")
+
+    # ── Add channel form ──────────────────────────────────────────
+
+    def _create_add_form(self, parent):
+        form = ctk.CTkFrame(parent, fg_color=self.theme["bg_secondary"], corner_radius=10)
+        form.pack(fill="x", pady=(0, 16))
+
+        ctk.CTkLabel(
+            form, text="Add Channel",
+            font=(self.theme["font_family"], self.theme["font_size_heading"], "bold"),
+            text_color=self.theme["text_primary"],
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+
+        row = ctk.CTkFrame(form, fg_color="transparent")
+        row.pack(fill="x", padx=16, pady=(0, 8))
+
+        # Channel ID
+        ctk.CTkLabel(
+            row, text="Channel ID:",
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            text_color=self.theme["text_secondary"],
+        ).pack(side="left", padx=(0, 4))
+
+        self._add_id_entry = ctk.CTkEntry(
+            row, width=200, height=32,
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            placeholder_text="UCxxxxxxxxxxxxxxxx",
+        )
+        self._add_id_entry.pack(side="left", padx=(0, 12))
+
+        # Channel name
+        ctk.CTkLabel(
+            row, text="Name:",
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            text_color=self.theme["text_secondary"],
+        ).pack(side="left", padx=(0, 4))
+
+        self._add_name_entry = ctk.CTkEntry(
+            row, width=180, height=32,
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            placeholder_text="My Channel",
+        )
+        self._add_name_entry.pack(side="left", padx=(0, 12))
+
+        # Set as Default checkbox
+        self._default_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            row, text="Set as Default",
+            variable=self._default_var,
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            text_color=self.theme["text_secondary"],
+        ).pack(side="left", padx=(0, 12))
+
+        # Add button
+        ctk.CTkButton(
+            row,
+            text="Add Channel",
+            font=(self.theme["font_family"], self.theme["font_size_body"], "bold"),
+            fg_color=self.theme["success"],
+            hover_color=self.theme["accent_hover"],
+            text_color="#FFFFFF",
+            width=120, height=32, corner_radius=8,
+            command=self._on_add_channel,
+        ).pack(side="left")
+
+        # Bottom padding
+        ctk.CTkFrame(form, fg_color="transparent", height=8).pack()
+
+    # ── Channels list ─────────────────────────────────────────────
+
+    def _create_channels_list(self, parent):
+        frame = ctk.CTkFrame(parent, fg_color=self.theme["bg_secondary"], corner_radius=10)
+        frame.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(
+            frame, text="Your Channels",
+            font=(self.theme["font_family"], self.theme["font_size_heading"], "bold"),
+            text_color=self.theme["text_primary"],
+        ).pack(anchor="w", padx=16, pady=(16, 8))
+
+        cols = ("name", "channel_id", "default", "added")
+        self._channels_tree = ttk.Treeview(
+            frame, columns=cols, show="headings", height=6, selectmode="browse",
+        )
+        self._channels_tree.heading("name", text="Name")
+        self._channels_tree.heading("channel_id", text="Channel ID")
+        self._channels_tree.heading("default", text="Default")
+        self._channels_tree.heading("added", text="Added")
+
+        self._channels_tree.column("name", width=200)
+        self._channels_tree.column("channel_id", width=220)
+        self._channels_tree.column("default", width=80, anchor="center")
+        self._channels_tree.column("added", width=160, anchor="center")
+
+        self._channels_tree.pack(fill="x", padx=16, pady=(0, 16))
+
+    # ── Action buttons ────────────────────────────────────────────
+
+    def _create_action_buttons(self, parent):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 16))
+
+        ctk.CTkButton(
+            row,
+            text="Remove Channel",
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            fg_color=self.theme["error"],
+            hover_color=self.theme["button_hover"],
+            text_color="#FFFFFF",
+            width=150, height=32, corner_radius=8,
+            command=self._on_remove_channel,
+        ).pack(side="left", padx=(0, 8))
+
+    # ── Per-channel stats summary ─────────────────────────────────
+
+    def _create_per_channel_stats(self, parent):
+        frame = ctk.CTkFrame(parent, fg_color=self.theme["bg_secondary"], corner_radius=10)
+        frame.pack(fill="x", pady=(0, 16))
+
+        ctk.CTkLabel(
+            frame, text="Per-Channel Video Stats",
+            font=(self.theme["font_family"], self.theme["font_size_heading"], "bold"),
+            text_color=self.theme["text_primary"],
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+
+        self._stats_label = ctk.CTkLabel(
+            frame,
+            text="Loading...",
+            font=(self.theme["font_family"], self.theme["font_size_body"]),
+            text_color=self.theme["text_secondary"],
+            wraplength=700, justify="left",
+        )
+        self._stats_label.pack(anchor="w", padx=16, pady=(0, 8))
+
+        self._stats_note = ctk.CTkLabel(
+            frame,
+            text=(
+                "Note: The videos table does not yet have a channel_id foreign key. "
+                "Per-channel breakdowns will become available after a schema migration "
+                "links videos to their respective channels."
+            ),
+            font=(self.theme["font_family"], self.theme["font_size_small"]),
+            text_color=self.theme["text_tertiary"],
+            wraplength=700, justify="left",
+        )
+        self._stats_note.pack(anchor="w", padx=16, pady=(0, 16))
+
+    # ── Data operations ───────────────────────────────────────────
+
+    def refresh_channels(self):
+        """Reload everything from the database."""
         try:
             channels = self.db.get_all_channels()
-            names = []
+        except Exception:
+            channels = []
+
+        # ---- Treeview ----
+        tree = self._channels_tree
+        if tree is not None:
+            for item in tree.get_children():
+                tree.delete(item)
             for ch in channels:
-                name = ch.get("channel_name") or ch.get("channel_id", "")
-                default = "Yes" if ch.get("is_default") else ""
-                self.tree.insert("", "end", values=(name, ch.get("channel_id", ""), default))
-                names.append(name)
-            if names:
-                self.channel_selector.configure(values=names)
-                self.channel_selector.set(names[0])
-            else:
-                self.channel_selector.configure(values=["(no channels)"])
-                self.channel_selector.set("(no channels)")
-        except Exception as e:
-            print(f"Error loading channels: {e}")
+                tree.insert(
+                    "", "end",
+                    iid=str(ch["channel_id"]),
+                    values=(
+                        ch.get("channel_name", ""),
+                        ch.get("channel_id", ""),
+                        "Yes" if ch.get("is_default") else "No",
+                        ch.get("created_at", ""),
+                    ),
+                )
 
-    def _add_channel(self):
-        cid = self.channel_id_entry.get().strip()
-        cname = self.channel_name_entry.get().strip()
-        if not cid:
-            self.app.dashboard_tab.add_log_entry("Channel ID is required", "ERROR")
-            return
+        # ---- Switcher dropdown ----
+        display_values = [
+            f"{ch.get('channel_name', '')}  ({ch.get('channel_id', '')})"
+            for ch in channels
+        ]
+        if not display_values:
+            display_values = ["-- no channels --"]
+        self._switcher_combo.configure(values=display_values)
+
+        # Pre-select the default channel if one exists
+        for ch in channels:
+            if ch.get("is_default"):
+                label = f"{ch.get('channel_name', '')}  ({ch.get('channel_id', '')})"
+                self._switcher_var.set(label)
+                break
+        else:
+            self._switcher_var.set(display_values[0])
+
+        # ---- Per-channel stats ----
+        self._update_stats(channels)
+
+    def _update_stats(self, channels):
+        """Update the per-channel stats placeholder."""
         try:
-            self.db.add_channel(cid, cname or cid, int(self.default_var.get()))
-            self.channel_id_entry.delete(0, "end")
-            self.channel_name_entry.delete(0, "end")
-            self._load_channels()
-            self.app.dashboard_tab.add_log_entry(f"Channel added: {cname or cid}", "SUCCESS")
-        except Exception as e:
-            self.app.dashboard_tab.add_log_entry(f"Error adding channel: {e}", "ERROR")
+            total_videos = len(self.db.get_all_videos())
+        except Exception:
+            total_videos = 0
 
-    def _remove_channel(self):
-        sel = self.tree.selection()
-        if not sel:
-            self.app.dashboard_tab.add_log_entry("No channel selected", "ERROR")
+        if not channels:
+            self._stats_label.configure(
+                text="No channels registered yet. Add a channel above to get started."
+            )
             return
-        vals = self.tree.item(sel[0])["values"]
-        if not messagebox.askyesno("Confirm", f"Remove channel {vals[0]}?"):
+
+        lines = [f"Registered channels: {len(channels)}"]
+        lines.append(f"Total videos in database (all channels): {total_videos}")
+        for ch in channels:
+            name = ch.get("channel_name", "Unknown")
+            default_tag = "  [DEFAULT]" if ch.get("is_default") else ""
+            lines.append(
+                f"\u2022 {name}{default_tag} -- video count: N/A (requires schema migration)"
+            )
+
+        self._stats_label.configure(text="\n".join(lines))
+
+    # ── Event handlers ────────────────────────────────────────────
+
+    def _on_add_channel(self):
+        channel_id = self._add_id_entry.get().strip()
+        channel_name = self._add_name_entry.get().strip()
+
+        if not channel_id:
+            messagebox.showwarning("Missing Field", "Please enter a Channel ID.")
             return
+        if not channel_name:
+            messagebox.showwarning("Missing Field", "Please enter a Channel Name.")
+            return
+
+        is_default = 1 if self._default_var.get() else 0
+
+        # If setting as default, clear existing defaults first
+        if is_default:
+            try:
+                existing = self.db.get_all_channels()
+                for ch in existing:
+                    if ch.get("is_default"):
+                        conn = self.db.get_connection()
+                        conn.execute(
+                            "UPDATE channels SET is_default = 0 WHERE channel_id = ?",
+                            (ch["channel_id"],),
+                        )
+                        conn.commit()
+                        conn.close()
+            except Exception:
+                pass
+
         try:
-            self.db.delete_channel(str(vals[1]))
-            self._load_channels()
-            self.app.dashboard_tab.add_log_entry(f"Channel removed: {vals[0]}", "WARNING")
-        except Exception as e:
-            self.app.dashboard_tab.add_log_entry(f"Error removing channel: {e}", "ERROR")
+            self.db.add_channel(channel_id, channel_name, is_default)
+        except Exception as exc:
+            messagebox.showerror("Error", f"Could not add channel:\n{exc}")
+            return
 
-    def refresh(self):
-        self._load_channels()
-        self.app.dashboard_tab.add_log_entry("Channels refreshed", "INFO")
+        self._add_id_entry.delete(0, "end")
+        self._add_name_entry.delete(0, "end")
+        self._default_var.set(False)
+        self.refresh_channels()
+
+    def _on_remove_channel(self):
+        tree = self._channels_tree
+        if tree is None:
+            return
+        selection = tree.selection()
+        if not selection:
+            messagebox.showinfo("No Selection", "Select a channel to remove first.")
+            return
+
+        channel_id = selection[0]
+        # Retrieve channel name for the confirmation message
+        channel_name = channel_id
+        try:
+            channels = self.db.get_all_channels()
+            for ch in channels:
+                if ch.get("channel_id") == channel_id:
+                    channel_name = ch.get("channel_name", channel_id)
+                    break
+        except Exception:
+            pass
+
+        confirmed = messagebox.askyesno(
+            "Confirm Removal",
+            f"Remove channel '{channel_name}' ({channel_id})?\n\n"
+            "This will not delete any videos from the database.",
+        )
+        if confirmed:
+            try:
+                self.db.delete_channel(channel_id)
+            except Exception as exc:
+                messagebox.showerror("Error", f"Could not remove channel:\n{exc}")
+                return
+            self.refresh_channels()
+
+    def _on_channel_switch(self, selection):
+        """Handle channel switcher dropdown change."""
+        # Extract channel_id from the display string "Name  (UCxxx)"
+        if "(" in selection and selection.endswith(")"):
+            channel_id = selection.rsplit("(", 1)[-1].rstrip(")")
+        else:
+            return
+
+        # Update the app-level active channel reference if available
+        if hasattr(self.app, "active_channel_id"):
+            self.app.active_channel_id = channel_id
