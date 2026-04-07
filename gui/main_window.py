@@ -15,6 +15,21 @@ from gui.analytics import AnalyticsTab
 from gui.channel_dashboard import ChannelDashboardTab
 from gui.manual_comment import ManualCommentTab
 from gui.theme_selector import ThemeSelectorTab
+from gui.ab_testing import ABTestingTab
+from gui.shorts_pipeline import ShortsPipelineTab
+from gui.scheduling import SchedulingTab
+from gui.seo_scorecard import SEOScorecardTab
+from gui.competitor_tracking import CompetitorTrackingTab
+from gui.trend_detection import TrendDetectionTab
+from gui.content_planner import ContentPlannerTab
+from gui.revenue_analytics import RevenueAnalyticsTab
+from gui.retention_heatmap import RetentionHeatmapTab
+from gui.cross_platform import CrossPlatformTab
+from gui.notifications_tab import NotificationsTab
+from gui.collaboration import CollaborationTab
+from gui.predictive import PredictiveTab
+from gui.lifecycle import LifecycleTab
+from gui.multi_channel import MultiChannelTab
 
 # Try to import pystray (requires Python 3.9+)
 try:
@@ -260,55 +275,89 @@ class RealETubeApp(ctk.CTk):
         )
         self.tabview.pack(fill="both", expand=True)
         
-        # Add tabs
+        # Add tabs — grouped logically
+        # Core
         self.tabview.add("Dashboard")
-        self.tabview.add("Channel")
-        self.tabview.add("Settings")
         self.tabview.add("Videos")
         self.tabview.add("Analytics")
+        self.tabview.add("Channel")
+        # Upload & Content
+        self.tabview.add("Schedule")
+        self.tabview.add("Shorts")
+        self.tabview.add("A/B Testing")
+        self.tabview.add("Content Plan")
+        # Research & Growth
+        self.tabview.add("SEO Score")
+        self.tabview.add("Competitors")
+        self.tabview.add("Trends")
+        self.tabview.add("Lifecycle")
+        # Analytics Extended
+        self.tabview.add("Revenue")
+        self.tabview.add("Retention")
+        self.tabview.add("Predictive")
+        # Platform & Settings
+        self.tabview.add("Multi-Channel")
+        self.tabview.add("Cross-Platform")
+        self.tabview.add("Notifications")
+        self.tabview.add("Collaboration")
         self.tabview.add("Manual Comment")
+        self.tabview.add("Settings")
         self.tabview.add("Themes")
-        
-        # Initialize tab content
+
+        # ── Initialize tab content ────────────────────────────────
+        # Core
         self.dashboard_tab = DashboardTab(
-            self.tabview.tab("Dashboard"),
-            self.theme_config,
-            self
-        )
-        
-        self.settings_tab = SettingsTab(
-            self.tabview.tab("Settings"),
-            self.theme_config,
-            self
-        )
-        
+            self.tabview.tab("Dashboard"), self.theme_config, self)
         self.videos_tab = VideosTab(
-            self.tabview.tab("Videos"),
-            self.theme_config,
-            self
-        )
-        
+            self.tabview.tab("Videos"), self.theme_config, self)
         self.analytics_tab = AnalyticsTab(
-            self.tabview.tab("Analytics"),
-            self.theme_config,
-            self
-        )
-        
+            self.tabview.tab("Analytics"), self.theme_config, self)
         self.channel_dashboard_tab = ChannelDashboardTab(
-            self.tabview.tab("Channel"),
-            self.theme_config
-        )
-        
+            self.tabview.tab("Channel"), self.theme_config)
+
+        # Upload & Content
+        self.scheduling_tab = SchedulingTab(
+            self.tabview.tab("Schedule"), self.theme_config, self)
+        self.shorts_tab = ShortsPipelineTab(
+            self.tabview.tab("Shorts"), self.theme_config, self)
+        self.ab_testing_tab = ABTestingTab(
+            self.tabview.tab("A/B Testing"), self.theme_config, self)
+        self.content_planner_tab = ContentPlannerTab(
+            self.tabview.tab("Content Plan"), self.theme_config, self)
+
+        # Research & Growth
+        self.seo_scorecard_tab = SEOScorecardTab(
+            self.tabview.tab("SEO Score"), self.theme_config, self)
+        self.competitor_tracking_tab = CompetitorTrackingTab(
+            self.tabview.tab("Competitors"), self.theme_config, self)
+        self.trend_detection_tab = TrendDetectionTab(
+            self.tabview.tab("Trends"), self.theme_config, self)
+        self.lifecycle_tab = LifecycleTab(
+            self.tabview.tab("Lifecycle"), self.theme_config, self)
+
+        # Analytics Extended
+        self.revenue_tab = RevenueAnalyticsTab(
+            self.tabview.tab("Revenue"), self.theme_config, self)
+        self.retention_tab = RetentionHeatmapTab(
+            self.tabview.tab("Retention"), self.theme_config, self)
+        self.predictive_tab = PredictiveTab(
+            self.tabview.tab("Predictive"), self.theme_config, self)
+
+        # Platform & Settings
+        self.multi_channel_tab = MultiChannelTab(
+            self.tabview.tab("Multi-Channel"), self.theme_config, self)
+        self.cross_platform_tab = CrossPlatformTab(
+            self.tabview.tab("Cross-Platform"), self.theme_config, self)
+        self.notifications_tab = NotificationsTab(
+            self.tabview.tab("Notifications"), self.theme_config, self)
+        self.collaboration_tab = CollaborationTab(
+            self.tabview.tab("Collaboration"), self.theme_config, self)
         self.manual_comment_tab = ManualCommentTab(
-            self.tabview.tab("Manual Comment"),
-            self.theme_config
-        )
-        
+            self.tabview.tab("Manual Comment"), self.theme_config)
+        self.settings_tab = SettingsTab(
+            self.tabview.tab("Settings"), self.theme_config, self)
         self.theme_selector_tab = ThemeSelectorTab(
-            self.tabview.tab("Themes"),
-            self.theme_config,
-            self
-        )
+            self.tabview.tab("Themes"), self.theme_config, self)
         
         # Initialize manual comment bot after automation engine is ready
         self.after(1000, self.initialize_manual_comment_bot)
@@ -423,20 +472,18 @@ class RealETubeApp(ctk.CTk):
             )
         
         # Let tabs know theme changed so they can update their colors
-        if hasattr(self, 'dashboard_tab'):
-            self.dashboard_tab.theme = self.theme_config
-        if hasattr(self, 'settings_tab'):
-            self.settings_tab.theme = self.theme_config
-        if hasattr(self, 'videos_tab'):
-            self.videos_tab.theme = self.theme_config
-        if hasattr(self, 'analytics_tab'):
-            self.analytics_tab.theme = self.theme_config
-        if hasattr(self, 'channel_dashboard_tab'):
-            self.channel_dashboard_tab.theme = self.theme_config
-        if hasattr(self, 'manual_comment_tab'):
-            self.manual_comment_tab.theme = self.theme_config
-        if hasattr(self, 'theme_selector_tab'):
-            self.theme_selector_tab.theme = self.theme_config
+        tab_attrs = [
+            'dashboard_tab', 'settings_tab', 'videos_tab', 'analytics_tab',
+            'channel_dashboard_tab', 'manual_comment_tab', 'theme_selector_tab',
+            'scheduling_tab', 'shorts_tab', 'ab_testing_tab', 'content_planner_tab',
+            'seo_scorecard_tab', 'competitor_tracking_tab', 'trend_detection_tab',
+            'lifecycle_tab', 'revenue_tab', 'retention_tab', 'predictive_tab',
+            'multi_channel_tab', 'cross_platform_tab', 'notifications_tab',
+            'collaboration_tab',
+        ]
+        for attr in tab_attrs:
+            if hasattr(self, attr):
+                getattr(self, attr).theme = self.theme_config
 
 if __name__ == "__main__":
     app = RealETubeApp()
