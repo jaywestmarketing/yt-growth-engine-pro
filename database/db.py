@@ -325,7 +325,7 @@ class DatabaseManager:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT * FROM keyword_performance 
-            WHERE video_count >= 3
+            WHERE video_count >= 1
             ORDER BY avg_views DESC, avg_engagement DESC
             LIMIT ?
         ''', (limit,))
@@ -360,6 +360,24 @@ class DatabaseManager:
         conn.close()
         return stats
     
+    def delete_video(self, video_id: int):
+        """Delete a video and its retry history from the database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM retry_history WHERE video_id = ?', (video_id,))
+        cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
+        conn.commit()
+        conn.close()
+
+    def get_video_by_youtube_id(self, youtube_video_id: str) -> Optional[Dict]:
+        """Get a video by its YouTube video ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM videos WHERE youtube_video_id = ?', (youtube_video_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
     def close(self):
         """Close database connection - no-op now since we use per-call connections"""
         pass
