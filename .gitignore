@@ -1,0 +1,4 @@
+config/
+credentials/
+*.pickle
+data/*.db
