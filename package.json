@@ -4,8 +4,7 @@
   "description": "RealE Tube - YouTube Automation Platform",
   "main": "electron/main.js",
   "scripts": {
-    "start": "electron .",
-    "postinstall": "electron-builder install-app-deps"
+    "start": "electron ."
   },
   "author": "RealE Technology Solutions",
   "license": "UNLICENSED",
