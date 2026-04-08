@@ -524,11 +524,13 @@ if __name__ == '__main__':
     print(f"\n  Open in your browser: http://localhost:{PORT}\n")
     print("  Press Ctrl+C to stop\n")
 
-    try:
-        import webbrowser
-        webbrowser.open(f'http://localhost:{PORT}')
-    except Exception:
-        pass
+    # Don't open browser if launched by Electron or with --no-browser
+    if '--no-browser' not in sys.argv and not os.environ.get('ELECTRON_MODE'):
+        try:
+            import webbrowser
+            webbrowser.open(f'http://localhost:{PORT}')
+        except Exception:
+            pass
 
     server = http.server.HTTPServer(('', PORT), DashboardHandler)
     try:
