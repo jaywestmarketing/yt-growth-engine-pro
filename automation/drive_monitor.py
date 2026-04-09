@@ -29,25 +29,7 @@ class DriveMonitor:
         else:
             raise ValueError("Must provide either credentials_path or drive_service")
         
-        self.processed_files = set()  # Track Drive file IDs (in-memory, current session)
-        self._processed_filenames = set()  # Track filenames from DB (cross-session)
-        self._load_processed_from_db()
-
-    def _load_processed_from_db(self):
-        """Load already-uploaded Drive files from the database so we
-        never re-process a video that was uploaded in a previous session.
-        Checks both file_path (which stores filename) and original_description."""
-        try:
-            from database.db import DatabaseManager
-            db = DatabaseManager()
-            videos = db.get_all_videos()
-            for v in videos:
-                # file_path stores the filename (e.g. "video.mp4")
-                fp = v.get('file_path', '')
-                if fp:
-                    self._processed_filenames.add(fp.lower().strip())
-        except Exception as e:
-            print(f"Warning: could not load processed files from DB: {e}")
+        self.processed_files = set()  # Track Drive file IDs processed this session
 
     def watch_folder(self, folder_id: str) -> List[Tuple[str, str]]:
         """
@@ -77,11 +59,8 @@ class DriveMonitor:
                 file_id = file['id']
                 file_name = file['name']
 
-                # Skip if already processed (by Drive ID or by filename)
+                # Skip if already processed this session
                 if file_id in self.processed_files:
-                    continue
-                if file_name.lower().strip() in self._processed_filenames:
-                    self.processed_files.add(file_id)  # cache for this session
                     continue
 
                 # Use the filename (without extension) as the description

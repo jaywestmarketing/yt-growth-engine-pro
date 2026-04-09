@@ -257,111 +257,141 @@ class RealETubeApp(ctk.CTk):
         self.status_indicator.pack()
     
     def create_tabs(self):
-        """Create tabbed interface"""
-        # Tab container
-        tab_container = ctk.CTkFrame(
-            self,
-            fg_color=self.theme_config["bg_primary"]
+        """Create sidebar + content area layout"""
+        t = self.theme_config
+
+        # ── Main horizontal container ─────────────────────────────
+        main_container = ctk.CTkFrame(self, fg_color=t["bg_primary"])
+        main_container.pack(fill="both", expand=True)
+
+        # ── Left sidebar ──────────────────────────────────────────
+        sidebar = ctk.CTkScrollableFrame(
+            main_container, fg_color=t["bg_secondary"],
+            width=180, corner_radius=0
         )
-        tab_container.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        # Create tabview
-        self.tabview = ctk.CTkTabview(
-            tab_container,
-            fg_color=self.theme_config["bg_secondary"],
-            segmented_button_fg_color=self.theme_config["bg_tertiary"],
-            segmented_button_selected_color=self.theme_config["accent"],
-            segmented_button_selected_hover_color=self.theme_config["accent_hover"],
-            text_color=self.theme_config["text_primary"]
-        )
-        self.tabview.pack(fill="both", expand=True)
-        
-        # Add tabs — grouped logically
-        # Core
-        self.tabview.add("Dashboard")
-        self.tabview.add("Videos")
-        self.tabview.add("Analytics")
-        self.tabview.add("Channel")
-        # Upload & Content
-        self.tabview.add("Schedule")
-        self.tabview.add("Shorts")
-        self.tabview.add("A/B Testing")
-        self.tabview.add("Content Plan")
-        # Research & Growth
-        self.tabview.add("SEO Score")
-        self.tabview.add("Competitors")
-        self.tabview.add("Trends")
-        self.tabview.add("Lifecycle")
-        # Analytics Extended
-        self.tabview.add("Revenue")
-        self.tabview.add("Retention")
-        self.tabview.add("Predictive")
-        # Platform & Settings
-        self.tabview.add("Multi-Channel")
-        self.tabview.add("Cross-Platform")
-        self.tabview.add("Notifications")
-        self.tabview.add("Collaboration")
-        self.tabview.add("Manual Comment")
-        self.tabview.add("Settings")
-        self.tabview.add("Themes")
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        # ── Initialize tab content ────────────────────────────────
-        # Core
-        self.dashboard_tab = DashboardTab(
-            self.tabview.tab("Dashboard"), self.theme_config, self)
-        self.videos_tab = VideosTab(
-            self.tabview.tab("Videos"), self.theme_config, self)
-        self.analytics_tab = AnalyticsTab(
-            self.tabview.tab("Analytics"), self.theme_config, self)
-        self.channel_dashboard_tab = ChannelDashboardTab(
-            self.tabview.tab("Channel"), self.theme_config)
+        # ── Right content area ────────────────────────────────────
+        self._content_area = ctk.CTkFrame(main_container, fg_color=t["bg_primary"])
+        self._content_area.pack(side="left", fill="both", expand=True)
 
-        # Upload & Content
-        self.scheduling_tab = SchedulingTab(
-            self.tabview.tab("Schedule"), self.theme_config, self)
-        self.shorts_tab = ShortsPipelineTab(
-            self.tabview.tab("Shorts"), self.theme_config, self)
-        self.ab_testing_tab = ABTestingTab(
-            self.tabview.tab("A/B Testing"), self.theme_config, self)
-        self.content_planner_tab = ContentPlannerTab(
-            self.tabview.tab("Content Plan"), self.theme_config, self)
+        # ── Tab frames (only one visible at a time) ───────────────
+        self._tab_frames = {}
+        self._sidebar_buttons = {}
+        self._active_tab = None
 
-        # Research & Growth
-        self.seo_scorecard_tab = SEOScorecardTab(
-            self.tabview.tab("SEO Score"), self.theme_config, self)
-        self.competitor_tracking_tab = CompetitorTrackingTab(
-            self.tabview.tab("Competitors"), self.theme_config, self)
-        self.trend_detection_tab = TrendDetectionTab(
-            self.tabview.tab("Trends"), self.theme_config, self)
-        self.lifecycle_tab = LifecycleTab(
-            self.tabview.tab("Lifecycle"), self.theme_config, self)
+        # Define nav items: (label, group_header_or_None)
+        nav_items = [
+            ("CORE", None),
+            ("Dashboard", "dashboard"),
+            ("Videos", "videos"),
+            ("Analytics", "analytics"),
+            ("Channel", "channel"),
+            ("UPLOAD & CONTENT", None),
+            ("Schedule", "schedule"),
+            ("Shorts", "shorts"),
+            ("A/B Testing", "ab_testing"),
+            ("Content Plan", "content_plan"),
+            ("Post Timing", "post_timing"),
+            ("RESEARCH & GROWTH", None),
+            ("SEO Score", "seo_score"),
+            ("Competitors", "competitors"),
+            ("Trends", "trends"),
+            ("Lifecycle", "lifecycle"),
+            ("ANALYTICS", None),
+            ("Revenue", "revenue"),
+            ("Retention", "retention"),
+            ("Predictive", "predictive"),
+            ("PLATFORM", None),
+            ("Multi-Channel", "multi_channel"),
+            ("Cross-Platform", "cross_platform"),
+            ("Notifications", "notifications"),
+            ("Collaboration", "collaboration"),
+            ("TOOLS", None),
+            ("Manual Comment", "manual_comment"),
+            ("Settings", "settings"),
+            ("Themes", "themes"),
+        ]
 
-        # Analytics Extended
-        self.revenue_tab = RevenueAnalyticsTab(
-            self.tabview.tab("Revenue"), self.theme_config, self)
-        self.retention_tab = RetentionHeatmapTab(
-            self.tabview.tab("Retention"), self.theme_config, self)
-        self.predictive_tab = PredictiveTab(
-            self.tabview.tab("Predictive"), self.theme_config, self)
+        for label, key in nav_items:
+            if key is None:
+                # Section header
+                ctk.CTkLabel(
+                    sidebar, text=label,
+                    font=(t["font_family"], 10, "bold"),
+                    text_color=t["text_tertiary"], anchor="w"
+                ).pack(fill="x", padx=14, pady=(12, 2))
+            else:
+                # Nav button
+                frame = ctk.CTkFrame(self._content_area, fg_color=t["bg_primary"])
+                self._tab_frames[key] = frame
 
-        # Platform & Settings
-        self.multi_channel_tab = MultiChannelTab(
-            self.tabview.tab("Multi-Channel"), self.theme_config, self)
-        self.cross_platform_tab = CrossPlatformTab(
-            self.tabview.tab("Cross-Platform"), self.theme_config, self)
-        self.notifications_tab = NotificationsTab(
-            self.tabview.tab("Notifications"), self.theme_config, self)
-        self.collaboration_tab = CollaborationTab(
-            self.tabview.tab("Collaboration"), self.theme_config, self)
-        self.manual_comment_tab = ManualCommentTab(
-            self.tabview.tab("Manual Comment"), self.theme_config)
-        self.settings_tab = SettingsTab(
-            self.tabview.tab("Settings"), self.theme_config, self)
-        self.theme_selector_tab = ThemeSelectorTab(
-            self.tabview.tab("Themes"), self.theme_config, self)
-        
+                btn = ctk.CTkButton(
+                    sidebar, text=label, anchor="w",
+                    font=(t["font_family"], 13),
+                    fg_color="transparent",
+                    hover_color=t["bg_tertiary"],
+                    text_color=t["text_secondary"],
+                    height=32, corner_radius=6,
+                    command=lambda k=key: self._switch_tab(k)
+                )
+                btn.pack(fill="x", padx=8, pady=1)
+                self._sidebar_buttons[key] = btn
+
+        # ── Initialize tab content into their frames ──────────────
+        self.dashboard_tab = DashboardTab(self._tab_frames["dashboard"], t, self)
+        self.videos_tab = VideosTab(self._tab_frames["videos"], t, self)
+        self.analytics_tab = AnalyticsTab(self._tab_frames["analytics"], t, self)
+        self.channel_dashboard_tab = ChannelDashboardTab(self._tab_frames["channel"], t)
+
+        self.scheduling_tab = SchedulingTab(self._tab_frames["schedule"], t, self)
+        self.shorts_tab = ShortsPipelineTab(self._tab_frames["shorts"], t, self)
+        self.ab_testing_tab = ABTestingTab(self._tab_frames["ab_testing"], t, self)
+        self.content_planner_tab = ContentPlannerTab(self._tab_frames["content_plan"], t, self)
+
+        # Post timing tab — new
+        from gui.post_timing import PostTimingTab
+        self.post_timing_tab = PostTimingTab(self._tab_frames["post_timing"], t, self)
+
+        self.seo_scorecard_tab = SEOScorecardTab(self._tab_frames["seo_score"], t, self)
+        self.competitor_tracking_tab = CompetitorTrackingTab(self._tab_frames["competitors"], t, self)
+        self.trend_detection_tab = TrendDetectionTab(self._tab_frames["trends"], t, self)
+        self.lifecycle_tab = LifecycleTab(self._tab_frames["lifecycle"], t, self)
+
+        self.revenue_tab = RevenueAnalyticsTab(self._tab_frames["revenue"], t, self)
+        self.retention_tab = RetentionHeatmapTab(self._tab_frames["retention"], t, self)
+        self.predictive_tab = PredictiveTab(self._tab_frames["predictive"], t, self)
+
+        self.multi_channel_tab = MultiChannelTab(self._tab_frames["multi_channel"], t, self)
+        self.cross_platform_tab = CrossPlatformTab(self._tab_frames["cross_platform"], t, self)
+        self.notifications_tab = NotificationsTab(self._tab_frames["notifications"], t, self)
+        self.collaboration_tab = CollaborationTab(self._tab_frames["collaboration"], t, self)
+        self.manual_comment_tab = ManualCommentTab(self._tab_frames["manual_comment"], t)
+        self.settings_tab = SettingsTab(self._tab_frames["settings"], t, self)
+        self.theme_selector_tab = ThemeSelectorTab(self._tab_frames["themes"], t, self)
+
+        # Show dashboard by default
+        self._switch_tab("dashboard")
+
         # Initialize manual comment bot after automation engine is ready
         self.after(1000, self.initialize_manual_comment_bot)
+
+    def _switch_tab(self, key):
+        """Switch visible content frame and highlight the sidebar button."""
+        t = self.theme_config
+        # Hide current
+        if self._active_tab and self._active_tab in self._tab_frames:
+            self._tab_frames[self._active_tab].pack_forget()
+            if self._active_tab in self._sidebar_buttons:
+                self._sidebar_buttons[self._active_tab].configure(
+                    fg_color="transparent", text_color=t["text_secondary"])
+        # Show new
+        self._tab_frames[key].pack(fill="both", expand=True, padx=10, pady=10)
+        if key in self._sidebar_buttons:
+            self._sidebar_buttons[key].configure(
+                fg_color=t["accent"], text_color="#FFFFFF")
+        self._active_tab = key
     
     def setup_system_tray(self):
         """Setup system tray icon and menu (only on Python 3.9+)"""
