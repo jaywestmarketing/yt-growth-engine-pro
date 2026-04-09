@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 RealE Tube - Settings Tab
 Copyright © 2024 RealE Technology Solutions. All rights reserved.
@@ -41,7 +42,9 @@ class SettingsTab:
             "performance": {
                 "min_views": 150,
                 "min_ctr": 3.0,
-                "min_engagement": 6.0
+                "min_engagement": 6.0,
+                "engagement_required": False,
+                "view_protection_multiplier": 2.0
             },
             "retry": {
                 "first_check_hours": 24,
@@ -221,6 +224,22 @@ class SettingsTab:
             "performance",
             1.0, 15.0, 6.0,
             step=0.1
+        )
+
+        self.create_toggle_input(
+            parent,
+            "Require Engagement (OFF = views-only mode, never delete for low engagement)",
+            "engagement_required",
+            "performance"
+        )
+
+        self.create_slider_input(
+            parent,
+            "View Protection Multiplier (videos with views above min_views x this are NEVER deleted)",
+            "view_protection_multiplier",
+            "performance",
+            1.0, 10.0, 2.0,
+            step=0.5
         )
     
     def create_retry_settings(self, parent):

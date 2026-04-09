@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 RealE Tube - YouTube Automation Platform
-Copyright © 2024 RealE Technology Solutions. All rights reserved.
+Copyright (c) 2024 RealE Technology Solutions. All rights reserved.
 
 Main application entry point
 """
@@ -18,7 +19,7 @@ from gui.main_window import RealETubeApp
 def main():
     """Initialize and run RealE Tube application"""
     print("Starting RealE Tube...")
-    print("Copyright © 2024 RealE Technology Solutions")
+    print("Copyright (c) 2024 RealE Technology Solutions")
     print("-" * 50)
     
     app = RealETubeApp()

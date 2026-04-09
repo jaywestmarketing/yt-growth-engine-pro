@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 RealE Tube - Competitor Channel Tracking Tab
 Copyright © 2024 RealE Technology Solutions. All rights reserved.

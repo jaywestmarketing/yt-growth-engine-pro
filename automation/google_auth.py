@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 RealE Tube - Google OAuth Helper
 Copyright © 2024 RealE Technology Solutions. All rights reserved.

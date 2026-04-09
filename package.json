@@ -1,0 +1,14 @@
+{
+  "name": "reale-tube",
+  "version": "1.0.0",
+  "description": "RealE Tube - YouTube Automation Platform",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "RealE Technology Solutions",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 RealE Tube - GUI Sync Helper
 Provides sync functionality for the GUI

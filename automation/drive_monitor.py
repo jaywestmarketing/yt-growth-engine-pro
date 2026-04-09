@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 RealE Tube - Google Drive Monitor
 Copyright © 2024 RealE Technology Solutions. All rights reserved.
