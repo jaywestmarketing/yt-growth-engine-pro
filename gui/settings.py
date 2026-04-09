@@ -21,14 +21,27 @@ class SettingsTab:
         self.create_settings()
     
     def load_settings(self):
-        """Load settings from config file"""
+        """Load settings from config file, merging with defaults for new keys"""
         config_path = Path(__file__).parent.parent / "config" / "config.json"
-        
+        defaults = self._get_defaults()
+
         if config_path.exists():
             with open(config_path, 'r') as f:
-                return json.load(f)
-        
-        # Default settings
+                saved = json.load(f)
+            # Merge: saved values win, but missing keys get defaults
+            for section, section_defaults in defaults.items():
+                if section not in saved:
+                    saved[section] = section_defaults
+                elif isinstance(section_defaults, dict):
+                    for key, val in section_defaults.items():
+                        if key not in saved[section]:
+                            saved[section][key] = val
+            return saved
+
+        return defaults
+
+    def _get_defaults(self):
+        """Return default settings dictionary"""
         return {
             "api": {
                 "google_drive_credentials": "",
