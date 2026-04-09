@@ -29,51 +29,67 @@ class DriveMonitor:
         else:
             raise ValueError("Must provide either credentials_path or drive_service")
         
-        self.processed_files = set()  # Track already processed files
-    
+        self.processed_files = set()  # Track already processed files (in-memory)
+        self._load_processed_from_db()
+
+    def _load_processed_from_db(self):
+        """Load already-uploaded Drive file paths from the database so we
+        never re-process a video that was uploaded in a previous session."""
+        try:
+            from database.db import DatabaseManager
+            db = DatabaseManager()
+            videos = db.get_all_videos()
+            for v in videos:
+                fp = v.get('file_path', '')
+                if fp:
+                    # file_path stores the Drive file ID
+                    self.processed_files.add(fp)
+        except Exception as e:
+            print(f"Warning: could not load processed files from DB: {e}")
+
     def watch_folder(self, folder_id: str) -> List[Tuple[str, str]]:
         """
         Check folder for new videos
-        
+
         Args:
             folder_id: Google Drive folder ID to monitor
-            
+
         Returns:
-            List of tuples: (video_file_id, description_text)
+            List of tuples: (video_file_id, file_name, description_text)
         """
         new_videos = []
-        
+
         try:
             # Query for video files in folder
             query = f"'{folder_id}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.avi') and trashed=false"
-            
+
             results = self.drive.files().list(
                 q=query,
                 fields="files(id, name, mimeType, createdTime)",
                 orderBy="createdTime desc"
             ).execute()
-            
+
             files = results.get('files', [])
-            
+
             for file in files:
                 file_id = file['id']
                 file_name = file['name']
-                
-                # Skip if already processed
+
+                # Skip if already processed (in-memory or from DB)
                 if file_id in self.processed_files:
                     continue
-                
+
                 # Use the filename (without extension) as the description
                 base_name = Path(file_name).stem
                 # Clean up the filename: replace underscores/hyphens with spaces
                 description = base_name.replace('_', ' ').replace('-', ' ')
-                
+
                 new_videos.append((file_id, file_name, description))
                 self.processed_files.add(file_id)
                 print(f"Found video: {file_name} - Using description: {description}")
-            
+
             return new_videos
-            
+
         except Exception as e:
             print(f"Error watching folder: {e}")
             return []
