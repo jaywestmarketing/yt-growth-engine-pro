@@ -41,8 +41,12 @@ class YouTubeResearcher:
         """
         
         all_videos = []
-        
+        self._quota_exhausted = getattr(self, '_quota_exhausted', False)
+
         for keyword in keywords[:3]:  # Search top 3 keywords to save quota
+            if self._quota_exhausted:
+                print(f"Skipping keyword '{keyword}' — quota exhausted")
+                continue
             try:
                 # Search for videos
                 search_response = self.youtube.search().list(
@@ -79,7 +83,12 @@ class YouTubeResearcher:
                         })
                 
             except Exception as e:
-                print(f"Error searching keyword '{keyword}': {e}")
+                err_str = str(e)
+                if 'quotaExceeded' in err_str:
+                    print(f"YouTube API quota exceeded — pausing all searches until reset")
+                    self._quota_exhausted = True
+                else:
+                    print(f"Error searching keyword '{keyword}': {e}")
                 continue
         
         # Sort by likes and return top results
