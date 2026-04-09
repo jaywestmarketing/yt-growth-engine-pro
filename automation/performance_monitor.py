@@ -162,6 +162,8 @@ class PerformanceMonitor:
         min_views = self.config['performance']['min_views']
         min_ctr = self.config['performance']['min_ctr']
         min_engagement = self.config['performance']['min_engagement']
+        engagement_required = self.config['performance'].get('engagement_required', False)
+        view_protection = self.config['performance'].get('view_protection_multiplier', 2.0)
 
         views = metrics.get('views', 0)
         impressions = metrics.get('impressions', 0)
@@ -175,10 +177,9 @@ class PerformanceMonitor:
         has_real_impressions = impressions > 0
         ctr = (views / impressions * 100) if has_real_impressions else 0
 
-        # ── High-performer safeguard ──────────────────────────────
-        # If a video has 2x or more the minimum views, it is performing
-        # well and must NEVER be deleted, even if engagement is low.
-        if views >= min_views * 2:
+        # ── View protection safeguard ─────────────────────────────
+        # Videos above (min_views * multiplier) are NEVER deleted.
+        if views >= min_views * view_protection:
             return {
                 'success': True,
                 'should_retry': False,
@@ -187,9 +188,10 @@ class PerformanceMonitor:
 
         # ── Standard threshold check ─────────────────────────────
         meets_views = views >= min_views
-        meets_engagement = engagement_rate >= min_engagement
         # Only require CTR when we can actually measure it
         meets_ctr = ctr >= min_ctr if has_real_impressions else True
+        # Engagement only matters if the user turned it on
+        meets_engagement = engagement_rate >= min_engagement if engagement_required else True
 
         if meets_views and meets_ctr and meets_engagement:
             return {
@@ -199,8 +201,6 @@ class PerformanceMonitor:
             }
 
         # ── Views met but engagement low — keep monitoring ────────
-        # Don't delete a video that is getting views just because
-        # engagement hasn't caught up yet.
         if meets_views and not meets_engagement:
             return {
                 'success': False,
@@ -214,7 +214,7 @@ class PerformanceMonitor:
             reasons.append(f"views ({views} < {min_views})")
         if has_real_impressions and not meets_ctr:
             reasons.append(f"CTR ({ctr:.1f}% < {min_ctr}%)")
-        if not meets_engagement:
+        if engagement_required and not meets_engagement:
             reasons.append(f"engagement ({engagement_rate:.1f}% < {min_engagement}%)")
 
         reason = "Underperforming: " + ", ".join(reasons)
