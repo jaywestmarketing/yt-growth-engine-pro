@@ -458,26 +458,36 @@ class DatabaseManager:
         """Get overall statistics"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         stats = {}
-        
-        # Total videos by status
-        cursor.execute('SELECT status, COUNT(*) as count FROM videos GROUP BY status')
-        stats['by_status'] = {row['status']: row['count'] for row in cursor.fetchall()}
-        
-        # Success rate
-        cursor.execute('SELECT COUNT(*) as total FROM videos WHERE status IN ("success", "abandoned", "retry")')
-        total_processed = cursor.fetchone()['total']
-        
-        cursor.execute('SELECT COUNT(*) as success FROM videos WHERE status = "success"')
-        success_count = cursor.fetchone()['success']
-        
-        stats['success_rate'] = (success_count / total_processed * 100) if total_processed > 0 else 0
-        
-        # Average attempts to success
-        cursor.execute('SELECT AVG(attempt_number) as avg_attempts FROM videos WHERE status = "success"')
-        stats['avg_attempts'] = cursor.fetchone()['avg_attempts'] or 0
-        
+
+        try:
+            # Total videos by status
+            cursor.execute('SELECT status, COUNT(id) as cnt FROM videos GROUP BY status')
+            stats['by_status'] = {}
+            for row in cursor.fetchall():
+                stats['by_status'][row['status']] = row['cnt']
+
+            # Success rate — use simple separate counts
+            cursor.execute('SELECT COUNT(id) FROM videos WHERE status IN ("success", "abandoned", "retry")')
+            total_processed = cursor.fetchone()[0] or 0
+
+            cursor.execute('SELECT COUNT(id) FROM videos WHERE status = "success"')
+            success_count = cursor.fetchone()[0] or 0
+
+            stats['success_rate'] = (success_count / total_processed * 100) if total_processed > 0 else 0
+
+            # Average attempts to success
+            cursor.execute('SELECT AVG(attempt_number) FROM videos WHERE status = "success"')
+            result = cursor.fetchone()[0]
+            stats['avg_attempts'] = result if result is not None else 0
+
+        except Exception as e:
+            print(f"Error in get_statistics: {e}")
+            stats.setdefault('by_status', {})
+            stats.setdefault('success_rate', 0)
+            stats.setdefault('avg_attempts', 0)
+
         conn.close()
         return stats
     
