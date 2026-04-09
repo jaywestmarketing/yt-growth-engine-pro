@@ -8,7 +8,15 @@ let pyProcess = null;
 let mainWindow = null;
 
 function findPython() {
-  const candidates = ["python3.11", "python3.10", "python3.9", "python3", "python"];
+  const candidates = [
+    "/usr/bin/python3",
+    "/usr/local/bin/python3.11",
+    "/usr/local/bin/python3.10",
+    "/usr/local/bin/python3.9",
+    "/usr/local/bin/python3",
+    "python3",
+    "python",
+  ];
   for (const cmd of candidates) {
     try {
       require("child_process").execSync(`${cmd} --version`, { stdio: "ignore" });
@@ -32,9 +40,15 @@ function startPython() {
   }
 
   const scriptPath = path.join(__dirname, "..", "web_app.py");
+  const env = { ...process.env, ELECTRON_MODE: "1" };
+  // Ensure common paths are available on macOS
+  if (process.platform === "darwin" && env.PATH) {
+    env.PATH = `/usr/local/bin:/usr/bin:/bin:${env.PATH}`;
+  }
+
   pyProcess = spawn(pythonCmd, [scriptPath, "--no-browser"], {
     cwd: path.join(__dirname, ".."),
-    env: { ...process.env, ELECTRON_MODE: "1" },
+    env: env,
   });
 
   pyProcess.stdout.on("data", (data) => {
