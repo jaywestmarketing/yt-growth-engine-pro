@@ -145,10 +145,10 @@ class YouTubeResearcher:
     def get_video_performance(self, video_id: str) -> Dict:
         """
         Get current performance metrics for a video
-        
+
         Args:
             video_id: YouTube video ID
-            
+
         Returns:
             Dict with current metrics
         """
@@ -157,26 +157,28 @@ class YouTubeResearcher:
                 part='statistics,snippet',
                 id=video_id
             ).execute()
-            
+
             if not response['items']:
                 return None
-            
+
             video = response['items'][0]
             stats = video['statistics']
-            
-            # Get impressions from analytics (requires additional auth)
-            # For now, we'll estimate based on views
+
             views = int(stats.get('viewCount', 0))
-            impressions = views * 10  # Rough estimate: 10% CTR is good
-            
+            likes = int(stats.get('likeCount', 0))
+            comments = int(stats.get('commentCount', 0))
+
+            # YouTube Data API v3 does not expose impressions directly.
+            # Store 0 so the caller knows it is unavailable rather than
+            # using a fabricated number that produces a fake CTR.
             return {
                 'views': views,
-                'likes': int(stats.get('likeCount', 0)),
-                'comments': int(stats.get('commentCount', 0)),
-                'impressions': impressions,
+                'likes': likes,
+                'comments': comments,
+                'impressions': 0,
                 'title': video['snippet']['title']
             }
-            
+
         except Exception as e:
             print(f"Error getting video performance: {e}")
             return None

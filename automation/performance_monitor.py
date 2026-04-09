@@ -142,50 +142,83 @@ class PerformanceMonitor:
     
     def _check_performance(self, metrics: Dict) -> Dict:
         """
-        Check if video meets performance thresholds
-        
+        Check if video meets performance thresholds.
+
+        Logic:
+        - A video that hits the view threshold is ALWAYS marked as success,
+          regardless of CTR/engagement.  High-view videos must never be deleted.
+        - CTR is only evaluated when real impression data is available
+          (YouTube Data API v3 does not provide impressions, so CTR is
+          skipped unless the caller supplies a positive impressions value).
+        - Engagement is evaluated but treated as advisory when views are
+          above 2x the minimum threshold.
+
         Args:
             metrics: Current video metrics
-            
+
         Returns:
             Dict with success, should_retry, and reason
         """
         min_views = self.config['performance']['min_views']
         min_ctr = self.config['performance']['min_ctr']
         min_engagement = self.config['performance']['min_engagement']
-        
+
         views = metrics.get('views', 0)
-        impressions = metrics.get('impressions', 1)
+        impressions = metrics.get('impressions', 0)
         likes = metrics.get('likes', 0)
         comments = metrics.get('comments', 0)
-        
-        # Calculate metrics
-        ctr = (views / impressions * 100) if impressions > 0 else 0
+
+        # Engagement rate
         engagement_rate = ((likes + comments) / views * 100) if views > 0 else 0
-        
-        # Check thresholds
+
+        # CTR — only meaningful when we have real impression data
+        has_real_impressions = impressions > 0
+        ctr = (views / impressions * 100) if has_real_impressions else 0
+
+        # ── High-performer safeguard ──────────────────────────────
+        # If a video has 2x or more the minimum views, it is performing
+        # well and must NEVER be deleted, even if engagement is low.
+        if views >= min_views * 2:
+            return {
+                'success': True,
+                'should_retry': False,
+                'reason': f'High performer ({views} views, {engagement_rate:.1f}% engagement)'
+            }
+
+        # ── Standard threshold check ─────────────────────────────
         meets_views = views >= min_views
-        meets_ctr = ctr >= min_ctr
         meets_engagement = engagement_rate >= min_engagement
-        
+        # Only require CTR when we can actually measure it
+        meets_ctr = ctr >= min_ctr if has_real_impressions else True
+
         if meets_views and meets_ctr and meets_engagement:
             return {
                 'success': True,
                 'should_retry': False,
                 'reason': 'Performance meets all thresholds'
             }
-        
-        # Build reason for retry
+
+        # ── Views met but engagement low — keep monitoring ────────
+        # Don't delete a video that is getting views just because
+        # engagement hasn't caught up yet.
+        if meets_views and not meets_engagement:
+            return {
+                'success': False,
+                'should_retry': False,
+                'reason': f'Views OK ({views}) but engagement low ({engagement_rate:.1f}%) — still monitoring'
+            }
+
+        # ── Underperforming — build reason ────────────────────────
         reasons = []
         if not meets_views:
             reasons.append(f"views ({views} < {min_views})")
-        if not meets_ctr:
+        if has_real_impressions and not meets_ctr:
             reasons.append(f"CTR ({ctr:.1f}% < {min_ctr}%)")
         if not meets_engagement:
             reasons.append(f"engagement ({engagement_rate:.1f}% < {min_engagement}%)")
-        
+
         reason = "Underperforming: " + ", ".join(reasons)
-        
+
         return {
             'success': False,
             'should_retry': True,
