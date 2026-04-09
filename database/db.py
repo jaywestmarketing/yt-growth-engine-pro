@@ -38,6 +38,7 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS videos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_path TEXT NOT NULL,
+                drive_file_id TEXT,
                 original_description TEXT,
                 youtube_video_id TEXT,
                 
@@ -100,6 +101,12 @@ class DatabaseManager:
             )
         ''')
         
+        # ── Migrations for existing databases ──
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN drive_file_id TEXT')
+        except Exception:
+            pass  # column already exists
+
         # ── Channels table (multi-channel support) ──
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS channels (
@@ -223,18 +230,27 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
-    def add_video(self, file_path: str, description: str) -> int:
+    def add_video(self, file_path: str, description: str, drive_file_id: str = None) -> int:
         """Add new video to database"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO videos (file_path, original_description, status)
-            VALUES (?, ?, 'pending')
-        ''', (file_path, description))
+            INSERT INTO videos (file_path, original_description, drive_file_id, status)
+            VALUES (?, ?, ?, 'pending')
+        ''', (file_path, description, drive_file_id))
         conn.commit()
         video_id = cursor.lastrowid
         conn.close()
         return video_id
+
+    def has_drive_file(self, drive_file_id: str) -> bool:
+        """Check if a Drive file ID already exists in the database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(id) FROM videos WHERE drive_file_id = ?', (drive_file_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
     
     def update_video_upload(self, video_id: int, youtube_video_id: str, 
                            title: str, description: str, tags: List[str], 

@@ -188,8 +188,13 @@ class AutomationEngine:
             self.log(f"New video found: {filename}", "INFO")
             
             try:
-                # Add to database
-                video_id = self.db.add_video(filename, description)
+                # Skip if already in database (by Drive file ID)
+                if self.db.has_drive_file(file_id):
+                    self.log(f"Skipping already uploaded: {filename}", "INFO")
+                    continue
+
+                # Add to database with Drive file ID
+                video_id = self.db.add_video(filename, description, drive_file_id=file_id)
                 
                 # Download video
                 download_path = Path("/tmp") / f"reale_tube_{video_id}_{filename}"
