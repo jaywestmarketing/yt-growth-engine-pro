@@ -31,6 +31,7 @@ from gui.collaboration import CollaborationTab
 from gui.predictive import PredictiveTab
 from gui.lifecycle import LifecycleTab
 from gui.multi_channel import MultiChannelTab
+from gui.auto_optimizer import AutoOptimizerTab
 
 # Try to import pystray (requires Python 3.9+)
 try:
@@ -308,6 +309,8 @@ class RealETubeApp(ctk.CTk):
             ("Competitors", "competitors"),
             ("Trends", "trends"),
             ("Lifecycle", "lifecycle"),
+            ("OPTIMIZATION", None),
+            ("Auto Optimizer", "auto_optimizer"),
             ("ANALYTICS", None),
             ("Revenue", "revenue"),
             ("Retention", "retention"),
@@ -368,6 +371,7 @@ class RealETubeApp(ctk.CTk):
         self.competitor_tracking_tab = CompetitorTrackingTab(self._tab_frames["competitors"], t, self)
         self.trend_detection_tab = TrendDetectionTab(self._tab_frames["trends"], t, self)
         self.lifecycle_tab = LifecycleTab(self._tab_frames["lifecycle"], t, self)
+        self.auto_optimizer_tab = AutoOptimizerTab(self._tab_frames["auto_optimizer"], t, self)
 
         self.revenue_tab = RevenueAnalyticsTab(self._tab_frames["revenue"], t, self)
         self.retention_tab = RetentionHeatmapTab(self._tab_frames["retention"], t, self)
@@ -517,8 +521,8 @@ class RealETubeApp(ctk.CTk):
             'dashboard_tab', 'settings_tab', 'videos_tab', 'analytics_tab',
             'channel_dashboard_tab', 'manual_comment_tab', 'theme_selector_tab',
             'scheduling_tab', 'shorts_tab', 'ab_testing_tab', 'content_planner_tab',
-            'seo_scorecard_tab', 'competitor_tracking_tab', 'trend_detection_tab',
-            'lifecycle_tab', 'revenue_tab', 'retention_tab', 'predictive_tab',
+            'post_timing_tab', 'seo_scorecard_tab', 'competitor_tracking_tab', 'trend_detection_tab',
+            'lifecycle_tab', 'auto_optimizer_tab', 'revenue_tab', 'retention_tab', 'predictive_tab',
             'multi_channel_tab', 'cross_platform_tab', 'notifications_tab',
             'collaboration_tab',
         ]

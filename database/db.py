@@ -227,6 +227,21 @@ class DatabaseManager:
             )
         ''')
 
+        # ── Lifecycle reoptimization history ───────────────────────
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS reopt_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id INTEGER NOT NULL,
+                old_title TEXT,
+                new_title TEXT,
+                old_ctr REAL DEFAULT 0,
+                old_engagement REAL DEFAULT 0,
+                improvement_reason TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )
+        ''')
+
         conn.commit()
         conn.close()
 
@@ -761,6 +776,32 @@ class DatabaseManager:
             cur.execute('SELECT * FROM seo_audits WHERE video_id=? ORDER BY created_at DESC', (video_id,))
         else:
             cur.execute('SELECT a.*, v.title_used FROM seo_audits a LEFT JOIN videos v ON a.video_id=v.id ORDER BY a.created_at DESC')
+        result = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return result
+
+    # ── Reoptimization tracking ──────────────────────────────────────
+
+    def add_reopt_record(self, video_id: int, old_title: str, new_title: str,
+                        old_ctr: float, old_engagement: float, reason: str = None) -> int:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        cur.execute('''INSERT INTO reopt_history
+                       (video_id, old_title, new_title, old_ctr, old_engagement, improvement_reason)
+                       VALUES (?,?,?,?,?,?)''',
+                    (video_id, old_title, new_title, old_ctr, old_engagement, reason))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def get_reopt_history(self, video_id: int = None) -> List[Dict]:
+        conn = self.get_connection()
+        cur = conn.cursor()
+        if video_id:
+            cur.execute('SELECT * FROM reopt_history WHERE video_id=? ORDER BY timestamp DESC', (video_id,))
+        else:
+            cur.execute('SELECT * FROM reopt_history ORDER BY timestamp DESC')
         result = [dict(r) for r in cur.fetchall()]
         conn.close()
         return result
