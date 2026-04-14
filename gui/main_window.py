@@ -265,12 +265,21 @@ class RealETubeApp(ctk.CTk):
         main_container.pack(fill="both", expand=True)
 
         # ── Left sidebar ──────────────────────────────────────────
-        sidebar = ctk.CTkScrollableFrame(
+        # Use a plain CTkFrame as the fixed-width outer shell so that
+        # pack_propagate(False) works correctly (CTkScrollableFrame wraps an
+        # internal canvas and ignores pack_propagate in older ctk versions).
+        sidebar_shell = ctk.CTkFrame(
             main_container, fg_color=t["bg_secondary"],
-            width=180, corner_radius=0
+            width=190, corner_radius=0
         )
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
+        sidebar_shell.pack(side="left", fill="y")
+        sidebar_shell.pack_propagate(False)
+
+        sidebar = ctk.CTkScrollableFrame(
+            sidebar_shell, fg_color="transparent",
+            corner_radius=0
+        )
+        sidebar.pack(fill="both", expand=True)
 
         # ── Right content area ────────────────────────────────────
         self._content_area = ctk.CTkFrame(main_container, fg_color=t["bg_primary"])
@@ -320,8 +329,9 @@ class RealETubeApp(ctk.CTk):
                 ctk.CTkLabel(
                     sidebar, text=label,
                     font=(t["font_family"], 10, "bold"),
-                    text_color=t["text_tertiary"], anchor="w"
-                ).pack(fill="x", padx=14, pady=(12, 2))
+                    text_color=t["text_tertiary"],
+                    anchor="w", justify="left"
+                ).pack(fill="x", padx=12, pady=(14, 2))
             else:
                 # Nav button
                 frame = ctk.CTkFrame(self._content_area, fg_color=t["bg_primary"])
@@ -330,13 +340,13 @@ class RealETubeApp(ctk.CTk):
                 btn = ctk.CTkButton(
                     sidebar, text=label, anchor="w",
                     font=(t["font_family"], 13),
-                    fg_color="transparent",
-                    hover_color=t["bg_tertiary"],
-                    text_color=t["text_secondary"],
-                    height=32, corner_radius=6,
+                    fg_color=t["bg_tertiary"],
+                    hover_color=t["accent_hover"],
+                    text_color=t["text_primary"],
+                    height=34, corner_radius=6,
                     command=lambda k=key: self._switch_tab(k)
                 )
-                btn.pack(fill="x", padx=8, pady=1)
+                btn.pack(fill="x", padx=6, pady=2)
                 self._sidebar_buttons[key] = btn
 
         # ── Initialize tab content into their frames ──────────────
@@ -385,7 +395,7 @@ class RealETubeApp(ctk.CTk):
             self._tab_frames[self._active_tab].pack_forget()
             if self._active_tab in self._sidebar_buttons:
                 self._sidebar_buttons[self._active_tab].configure(
-                    fg_color="transparent", text_color=t["text_secondary"])
+                    fg_color=t["bg_tertiary"], text_color=t["text_primary"])
         # Show new
         self._tab_frames[key].pack(fill="both", expand=True, padx=10, pady=10)
         if key in self._sidebar_buttons:
