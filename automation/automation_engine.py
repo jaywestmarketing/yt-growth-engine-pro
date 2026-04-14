@@ -222,37 +222,68 @@ class AutomationEngine:
     def _process_retries(self):
         """Process videos marked for retry"""
         retry_videos = self.db.get_videos_by_status('retry')
-        
+
         for video in retry_videos:
-            self.log(f"Retrying video: {video['title_used']} (Attempt {video['attempt_number']})", "WARNING")
-            
+            drive_file_id = video.get('drive_file_id')
+            label = video.get('title_used') or video.get('file_path', f"id={video['id']}")
+
+            # The original temp file is gone after the first attempt.
+            # We must re-download from Drive before we can retry.
+            if not drive_file_id:
+                self.log(
+                    f"Skipping retry for '{label}' — no Drive file ID recorded. "
+                    "Cannot re-download without a Drive file ID.",
+                    "WARNING"
+                )
+                continue
+
+            if not self.drive_monitor:
+                self.log("Drive monitor unavailable — cannot re-download for retry.", "WARNING")
+                continue
+
+            filename = Path(video['file_path']).name
+            tmp_path = Path("/tmp") / f"reale_tube_retry_{video['id']}_{filename}"
+
+            self.log(
+                f"Re-downloading for retry: {label} (Attempt {video['attempt_number']})",
+                "WARNING"
+            )
+
+            if not self.drive_monitor.download_video(drive_file_id, str(tmp_path)):
+                self.log(f"Could not re-download '{label}' from Drive — skipping retry.", "ERROR")
+                continue
+
             try:
-                # Re-download from Drive if needed
-                # For now, skip if file not available
-                # In production, you'd store the Drive file ID
-                
-                # Generate new metadata with different strategy
                 self._process_and_upload(
                     video['id'],
-                    video['file_path'],
+                    str(tmp_path),
                     video['original_description'],
                     attempt=video['attempt_number']
                 )
-                
             except Exception as e:
                 self.log(f"Error retrying video {video['id']}: {e}", "ERROR")
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink()
     
-    def _process_and_upload(self, video_id: int, video_path: str, 
+    def _process_and_upload(self, video_id: int, video_path: str,
                            description: str, attempt: int = 1):
         """
         Process video: generate metadata and upload
-        
+
         Args:
             video_id: Database video ID
             video_path: Path to video file
             description: Original description
             attempt: Retry attempt number
         """
+        # Guard: confirm the file exists before burning Claude/YouTube API quota.
+        if not Path(video_path).exists():
+            raise FileNotFoundError(
+                f"Video file not found at '{video_path}'. "
+                "Keyword generation and upload skipped."
+            )
+
         # Check video duration for YouTube Shorts
         duration = self.drive_monitor.get_video_duration(video_path)
         is_short = duration > 0 and duration <= 60  # YouTube Shorts: max 60 seconds
