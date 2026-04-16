@@ -8,9 +8,24 @@ from automation.google_auth import GoogleAuthHelper
 from automation.keyword_generator import KeywordGenerator
 from automation.youtube_research import YouTubeResearcher
 from automation.comment_bot import CommentBot
+import json
 import time
+from pathlib import Path
 from typing import List, Dict
 from urllib.parse import urlparse, parse_qs
+
+
+def _load_competitor_max_age_days(default: int = 7) -> int:
+    """Read the competitor age filter from config.json, falling back to 7."""
+    try:
+        config_path = Path(__file__).parent.parent / "config" / "config.json"
+        if not config_path.exists():
+            return default
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return int(cfg.get("keywords", {}).get("competitor_max_age_days", default))
+    except Exception:
+        return default
 
 class StandaloneCommentBot:
     def __init__(self, youtube_service, ai_generator: KeywordGenerator):
@@ -96,11 +111,13 @@ class StandaloneCommentBot:
             
             print(f"Generated {len(keywords)} keywords: {', '.join(keywords[:5])}...")
             
-            # Search for similar videos
+            # Search for similar videos — respect the user's age filter
+            # (default 7 days) so we don't surface stale videos.
             similar_videos = self.researcher.search_competitors(
                 keywords,
                 min_likes=50,  # Lower threshold for broader results
-                max_results=max_results
+                max_results=max_results,
+                max_age_days=_load_competitor_max_age_days(),
             )
             
             # Remove the original video from results

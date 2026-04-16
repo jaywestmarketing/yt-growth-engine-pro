@@ -7,6 +7,7 @@ Copyright © 2024 RealE Technology Solutions. All rights reserved.
 from database.db import DatabaseManager
 from automation.youtube_research import YouTubeResearcher
 from automation.youtube_uploader import YouTubeUploader
+from automation.quota_manager import QuotaManager
 from datetime import datetime, timedelta
 from typing import Dict, List
 import json
@@ -45,24 +46,36 @@ class PerformanceMonitor:
             'skipped_too_early': 0
         }
         
+        # Refuse to monitor anything when quota is exhausted — prevents
+        # hundreds of quotaExceeded errors spamming the log.
+        qm = QuotaManager.get_instance()
+        if qm.is_exhausted():
+            summary['quota_exhausted'] = True
+            return summary
+
         # Get videos that need checking
         videos = self.db.get_videos_for_monitoring()
-        
+
         for video in videos:
             # Check if enough time has passed since upload
             if not self._should_check_now(video):
                 summary['skipped_too_early'] += 1
                 continue
-            
+
+            # Bail immediately if quota was exhausted mid-loop.
+            if qm.is_exhausted():
+                summary['quota_exhausted'] = True
+                break
+
             # This video passed its check time - process it now
             summary['checked'] += 1
-            
+
             upload_date = datetime.fromisoformat(video['upload_date'])
             hours_since_upload = (datetime.now() - upload_date).total_seconds() / 3600
-            
+
             print(f"Checking video: {video['title_used'][:40]}... "
                   f"(Attempt {video['attempt_number']}, {hours_since_upload:.1f}h since upload)")
-            
+
             # Get current performance
             metrics = self.youtube.get_video_performance(video['youtube_video_id'])
             

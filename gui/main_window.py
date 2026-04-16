@@ -248,7 +248,7 @@ class RealETubeApp(ctk.CTk):
             fg_color="transparent"
         )
         self.status_frame.pack(side="right", padx=30, pady=15)
-        
+
         self.status_indicator = ctk.CTkLabel(
             self.status_frame,
             text="● Automation Active",
@@ -256,6 +256,21 @@ class RealETubeApp(ctk.CTk):
             text_color=self.theme_config["success"]
         )
         self.status_indicator.pack()
+
+        # Floating assistant button — opens the chat widget
+        self.chat_button = ctk.CTkButton(
+            header_frame,
+            text="Ask Assistant",
+            font=(self.theme_config["font_family"], self.theme_config["font_size_body"], "bold"),
+            fg_color=self.theme_config["accent"],
+            hover_color=self.theme_config["accent_hover"],
+            text_color="#FFFFFF",
+            width=140, height=36, corner_radius=18,
+            command=self.open_chat_assistant,
+        )
+        self.chat_button.pack(side="right", padx=(0, 12), pady=15)
+
+        self._chat_window = None
     
     def create_tabs(self):
         """Create sidebar + content area layout"""
@@ -407,6 +422,20 @@ class RealETubeApp(ctk.CTk):
                 fg_color=t["accent"], text_color="#FFFFFF")
         self._active_tab = key
     
+    def open_chat_assistant(self):
+        """Show (and lazily create) the floating chat assistant window."""
+        from gui.chat_widget import ChatWidget
+        try:
+            if self._chat_window is None or not self._chat_window.winfo_exists():
+                self._chat_window = ChatWidget(self)
+            else:
+                self._chat_window.deiconify()
+            self._chat_window.lift()
+            self._chat_window.focus_force()
+        except Exception as e:
+            print(f"Could not open chat assistant: {e}")
+            self.log_to_dashboard(f"Could not open chat assistant: {e}", "ERROR")
+
     def setup_system_tray(self):
         """Setup system tray icon and menu (only on Python 3.9+)"""
         if not TRAY_AVAILABLE:

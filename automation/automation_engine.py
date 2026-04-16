@@ -95,21 +95,23 @@ class AutomationEngine:
             self.log(f"Error initializing components: {e}", "ERROR")
     
     def start(self):
-        """Start automation in background thread"""
+        """Start automation using the autonomous orchestrator.
+
+        The orchestrator handles catch-up, quota awareness, retries,
+        monitoring, reoptimization, and scheduled publishing with adaptive
+        sleep intervals — replacing the old fixed 5-minute loop that
+        kept hammering the API even when quota was exhausted.
+        """
         if self.running:
             self.log("Automation already running", "WARNING")
             return
-        
+
         self.running = True
-        
-        # Run catchup check immediately on startup
-        self.log("Running startup catchup check...", "INFO")
-        threading.Thread(target=self._startup_catchup, daemon=True).start()
-        
-        # Start main automation loop
-        self.thread = threading.Thread(target=self._automation_loop, daemon=True)
-        self.thread.start()
-        self.log("Automation started", "SUCCESS")
+
+        from automation.autonomous_orchestrator import AutonomousOrchestrator
+        self.orchestrator = AutonomousOrchestrator(self, self.config, log=self.log)
+        self.orchestrator.start()
+        self.log("Autonomous automation started.", "SUCCESS")
     
     def _startup_catchup(self):
         """
@@ -140,31 +142,10 @@ class AutomationEngine:
     def stop(self):
         """Stop automation"""
         self.running = False
-        if self.thread:
-            self.thread.join(timeout=5)
+        orchestrator = getattr(self, 'orchestrator', None)
+        if orchestrator:
+            orchestrator.stop()
         self.log("Automation stopped", "WARNING")
-    
-    def _automation_loop(self):
-        """Main automation loop"""
-        check_interval = 300  # Check every 5 minutes
-        
-        while self.running:
-            try:
-                # 1. Check for new videos in Drive
-                self._process_new_videos()
-                
-                # 2. Process pending retries
-                self._process_retries()
-                
-                # 3. Monitor existing videos
-                self._monitor_performance()
-                
-                # Wait before next cycle
-                time.sleep(check_interval)
-                
-            except Exception as e:
-                self.log(f"Error in automation loop: {e}", "ERROR")
-                time.sleep(60)  # Wait a minute before retrying
     
     def _process_new_videos(self):
         """Check Drive for new videos and process them"""
@@ -299,7 +280,11 @@ class AutomationEngine:
         # 2. Research competitors
         min_likes = self.config['keywords']['competitor_min_likes']
         max_results = self.config['keywords']['competitors_to_analyze']
-        competitors = self.youtube_researcher.search_competitors(keywords, min_likes, max_results)
+        # Default to 7 days so we focus on what's trending now. 0 = no limit.
+        max_age_days = self.config['keywords'].get('competitor_max_age_days', 7)
+        competitors = self.youtube_researcher.search_competitors(
+            keywords, min_likes, max_results, max_age_days=max_age_days
+        )
         self.log(f"Found {len(competitors)} competitor videos", "INFO")
         
         # 3. Extract competitor data

@@ -6,7 +6,8 @@ Copyright © 2024 RealE Technology Solutions. All rights reserved.
 
 from googleapiclient.http import MediaFileUpload
 from automation.google_auth import GoogleAuthHelper
-from typing import List, Dict
+from automation.quota_manager import QuotaManager
+from typing import List, Dict, Optional
 import os
 
 class YouTubeUploader:
@@ -26,16 +27,17 @@ class YouTubeUploader:
         else:
             raise ValueError("Must provide either credentials_path or youtube_service")
     
-    def upload_video(self, 
+    def upload_video(self,
                     video_path: str,
                     title: str,
                     description: str,
                     tags: List[str],
                     category_id: str = "22",  # People & Blogs
-                    privacy_status: str = "public") -> str:
+                    privacy_status: str = "public",
+                    publish_at: Optional[str] = None) -> str:
         """
         Upload video to YouTube
-        
+
         Args:
             video_path: Path to video file
             title: Video title
@@ -43,16 +45,34 @@ class YouTubeUploader:
             tags: List of tags
             category_id: YouTube category ID (22 = People & Blogs, 27 = Education)
             privacy_status: "public", "private", or "unlisted"
-            
+            publish_at: ISO 8601 datetime (e.g. '2025-01-01T18:00:00Z') for native
+                       YouTube scheduled publishing. If provided, privacy_status
+                       is forced to 'private' (YouTube requires this for scheduled
+                       releases) and YouTube will auto-flip the video to public
+                       at that time — no app uptime required.
+
         Returns:
             YouTube video ID
         """
-        
+
         # Validate file exists
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
-        
+
+        qm = QuotaManager.get_instance()
+        if not qm.spend('videos.insert'):
+            raise RuntimeError("YouTube upload quota exhausted. Wait for daily reset.")
+
         # Prepare request body
+        status_block = {
+            'privacyStatus': privacy_status,
+            'selfDeclaredMadeForKids': False
+        }
+        if publish_at:
+            # YouTube requires privacyStatus='private' when publishAt is set
+            status_block['privacyStatus'] = 'private'
+            status_block['publishAt'] = publish_at
+
         body = {
             'snippet': {
                 'title': title,
@@ -60,10 +80,7 @@ class YouTubeUploader:
                 'tags': tags,
                 'categoryId': category_id
             },
-            'status': {
-                'privacyStatus': privacy_status,
-                'selfDeclaredMadeForKids': False
-            }
+            'status': status_block
         }
         
         # Create media upload
@@ -109,18 +126,22 @@ class YouTubeUploader:
         Returns:
             True if successful
         """
+        qm = QuotaManager.get_instance()
+        if not qm.spend('videos.list'):
+            return False
+
         try:
             # Get current video details
             response = self.youtube.videos().list(
                 part='snippet',
                 id=video_id
             ).execute()
-            
+
             if not response['items']:
                 return False
-            
+
             snippet = response['items'][0]['snippet']
-            
+
             # Update only provided fields
             if title:
                 snippet['title'] = title
@@ -128,8 +149,10 @@ class YouTubeUploader:
                 snippet['description'] = description
             if tags:
                 snippet['tags'] = tags
-            
+
             # Update video
+            if not qm.spend('videos.update'):
+                return False
             update_response = self.youtube.videos().update(
                 part='snippet',
                 body={
@@ -137,10 +160,12 @@ class YouTubeUploader:
                     'snippet': snippet
                 }
             ).execute()
-            
+
             return True
-            
+
         except Exception as e:
+            if qm.handle_api_error(e):
+                return False
             print(f"Error updating video: {e}")
             return False
     
@@ -154,12 +179,18 @@ class YouTubeUploader:
         Returns:
             True if successful
         """
+        qm = QuotaManager.get_instance()
+        if not qm.spend('videos.delete'):
+            return False
+
         try:
             self.youtube.videos().delete(id=video_id).execute()
             print(f"Video {video_id} deleted successfully")
             return True
-            
+
         except Exception as e:
+            if qm.handle_api_error(e):
+                return False
             print(f"Error deleting video: {e}")
             return False
     
