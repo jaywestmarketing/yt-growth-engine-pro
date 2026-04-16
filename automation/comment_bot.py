@@ -6,6 +6,7 @@ Copyright © 2024 RealE Technology Solutions. All rights reserved.
 
 from automation.google_auth import GoogleAuthHelper
 from automation.keyword_generator import KeywordGenerator
+from automation.quota_manager import QuotaManager
 from typing import List, Dict
 import random
 import time
@@ -39,9 +40,16 @@ class CommentBot:
         if video_id in self.commented_videos:
             print(f"Already commented on video: {video_id}")
             return False
-        
+
+        qm = QuotaManager.get_instance()
+        # Commenting requires videos.list (1) + commentThreads.insert (50) = 51 units
+        if not qm.can_spend('commentThreads.insert'):
+            return False
+
         try:
             # Get video info first
+            if not qm.spend('videos.list'):
+                return False
             video_info = self.youtube.videos().list(
                 part='snippet',
                 id=video_id
@@ -59,6 +67,8 @@ class CommentBot:
                 comment_text = self._get_template_comment(comment_style)
             
             # Post comment
+            if not qm.spend('commentThreads.insert'):
+                return False
             request = self.youtube.commentThreads().insert(
                 part="snippet",
                 body={
@@ -72,18 +82,21 @@ class CommentBot:
                     }
                 }
             )
-            
+
             response = request.execute()
-            
+
             # Track that we've commented
             self.commented_videos.add(video_id)
-            
+
             print(f"✓ Commented on video: {video_title[:50]}...")
             print(f"  Comment: {comment_text[:80]}...")
-            
+
             return True
-            
+
         except Exception as e:
+            # If this was a quota error, mark globally so every other module bails too
+            if qm.handle_api_error(e):
+                return False
             print(f"Error commenting on video {video_id}: {e}")
             return False
     
@@ -189,31 +202,45 @@ Comment:"""
         results = {
             "success": 0,
             "failed": 0,
-            "skipped": 0
+            "skipped": 0,
+            "quota_exhausted": False,
         }
-        
+
+        qm = QuotaManager.get_instance()
+
         # Limit to max_comments
         videos_to_comment = video_ids[:max_comments]
-        
+
         for i, video_id in enumerate(videos_to_comment):
             # Skip if already commented
             if video_id in self.commented_videos:
                 results["skipped"] += 1
                 continue
-            
+
+            # If quota is dead, don't bother with the API — stop the loop
+            # instead of sleeping 60s between failed requests.
+            if qm.is_exhausted():
+                results["quota_exhausted"] = True
+                results["skipped"] += (len(videos_to_comment) - i)
+                break
+
             # Post comment
             success = self.comment_on_competitor(video_id, comment_style)
-            
+
             if success:
                 results["success"] += 1
             else:
                 results["failed"] += 1
-            
+                # If the failure was a quota error, stop now.
+                if qm.is_exhausted():
+                    results["quota_exhausted"] = True
+                    break
+
             # Wait between comments (except for last one)
-            if i < len(videos_to_comment) - 1:
+            if i < len(videos_to_comment) - 1 and not qm.is_exhausted():
                 print(f"Waiting {delay_seconds} seconds before next comment...")
                 time.sleep(delay_seconds)
-        
+
         return results
     
     def reset_commented_videos(self):

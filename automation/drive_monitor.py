@@ -33,7 +33,7 @@ class DriveMonitor:
 
     def watch_folder(self, folder_id: str) -> List[Tuple[str, str]]:
         """
-        Check folder for new videos
+        Check folder for new videos, with retry on transient network errors.
 
         Args:
             folder_id: Google Drive folder ID to monitor
@@ -43,40 +43,56 @@ class DriveMonitor:
         """
         new_videos = []
 
-        try:
-            # Query for video files in folder
-            query = f"'{folder_id}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.avi') and trashed=false"
+        query = (
+            f"'{folder_id}' in parents and "
+            f"(mimeType contains 'video/' or name contains '.mp4' or "
+            f"name contains '.mov' or name contains '.avi') and trashed=false"
+        )
 
-            results = self.drive.files().list(
-                q=query,
-                fields="files(id, name, mimeType, createdTime)",
-                orderBy="createdTime desc"
-            ).execute()
+        # Up to 3 attempts with exponential backoff on transient errors.
+        results = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                results = self.drive.files().list(
+                    q=query,
+                    fields="files(id, name, mimeType, createdTime)",
+                    orderBy="createdTime desc"
+                ).execute()
+                break
+            except Exception as e:
+                last_err = e
+                err_str = str(e).lower()
+                if 'timeout' in err_str or 'timed out' in err_str or 'connection' in err_str:
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)  # 1s, 2s
+                        continue
+                print(f"Error watching folder: {e}")
+                return []
 
-            files = results.get('files', [])
-
-            for file in files:
-                file_id = file['id']
-                file_name = file['name']
-
-                # Skip if already processed this session
-                if file_id in self.processed_files:
-                    continue
-
-                # Use the filename (without extension) as the description
-                base_name = Path(file_name).stem
-                # Clean up the filename: replace underscores/hyphens with spaces
-                description = base_name.replace('_', ' ').replace('-', ' ')
-
-                new_videos.append((file_id, file_name, description))
-                self.processed_files.add(file_id)
-                print(f"Found video: {file_name} - Using description: {description}")
-
-            return new_videos
-
-        except Exception as e:
-            print(f"Error watching folder: {e}")
+        if results is None:
+            print(f"Error watching folder after retries: {last_err}")
             return []
+
+        files = results.get('files', [])
+
+        for file in files:
+            file_id = file['id']
+            file_name = file['name']
+
+            # Skip if already processed this session
+            if file_id in self.processed_files:
+                continue
+
+            # Use the filename (without extension) as the description
+            base_name = Path(file_name).stem
+            description = base_name.replace('_', ' ').replace('-', ' ')
+
+            new_videos.append((file_id, file_name, description))
+            self.processed_files.add(file_id)
+            print(f"Found video: {file_name} - Using description: {description}")
+
+        return new_videos
     
     def _find_description(self, folder_id: str, video_filename: str) -> str:
         """

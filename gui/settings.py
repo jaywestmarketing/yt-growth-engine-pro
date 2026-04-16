@@ -68,6 +68,7 @@ class SettingsTab:
             "keywords": {
                 "competitor_min_likes": 150,
                 "competitors_to_analyze": 20,
+                "competitor_max_age_days": 0,
                 "keyword_aggressiveness": "Medium"
             },
             "comment_bot": {
@@ -305,7 +306,18 @@ class SettingsTab:
             "keywords",
             5, 50, 20
         )
-        
+
+        # Max age of competitor videos in days. 0 means "no limit" —
+        # use anything that matches our keywords, regardless of when
+        # it was uploaded.
+        self.create_slider_input(
+            parent,
+            "Competitor Max Age (days, 0 = no limit)",
+            "competitor_max_age_days",
+            "keywords",
+            0, 730, 0
+        )
+
         self.create_option_input(
             parent,
             "Keyword Variation Aggressiveness",

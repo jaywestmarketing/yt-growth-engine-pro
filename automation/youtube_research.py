@@ -6,7 +6,9 @@ Copyright © 2024 RealE Technology Solutions. All rights reserved.
 
 from googleapiclient.discovery import build
 from automation.google_auth import GoogleAuthHelper
-from typing import List, Dict, Tuple
+from automation.quota_manager import QuotaManager
+from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Optional, Tuple
 import json
 
 class YouTubeResearcher:
@@ -26,41 +28,64 @@ class YouTubeResearcher:
         else:
             raise ValueError("Must provide either credentials_path or youtube_service")
     
-    def search_competitors(self, keywords: List[str], min_likes: int = 150, 
-                          max_results: int = 20) -> List[Dict]:
+    def search_competitors(self, keywords: List[str], min_likes: int = 150,
+                          max_results: int = 20,
+                          max_age_days: Optional[int] = None) -> List[Dict]:
         """
         Search for competitor videos with minimum likes
-        
+
         Args:
             keywords: List of keywords to search for
             min_likes: Minimum number of likes required
             max_results: Maximum number of videos to return
-            
+            max_age_days: If set and > 0, only consider videos uploaded within
+                          this many days. Passed to the YouTube search as
+                          `publishedAfter` to let the API do the filtering,
+                          which saves quota and avoids ranking stale clips.
+
         Returns:
             List of video information dicts
         """
-        
+
         all_videos = []
-        self._quota_exhausted = getattr(self, '_quota_exhausted', False)
+        qm = QuotaManager.get_instance()
+
+        # Build the `publishedAfter` filter once so every keyword search uses
+        # the same cutoff. YouTube expects RFC 3339 (UTC, Z-suffixed).
+        published_after = None
+        if max_age_days and max_age_days > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=int(max_age_days))
+            published_after = cutoff.strftime('%Y-%m-%dT%H:%M:%SZ')
 
         for keyword in keywords[:3]:  # Search top 3 keywords to save quota
-            if self._quota_exhausted:
-                print(f"Skipping keyword '{keyword}' — quota exhausted")
+            if qm.is_exhausted():
+                print(f"Skipping keyword '{keyword}' — YouTube API quota exhausted.")
+                continue
+            # search.list costs 100 units — refuse early if we can't afford it
+            if not qm.can_spend('search.list'):
+                print(f"Skipping keyword '{keyword}' — insufficient quota remaining.")
                 continue
             try:
                 # Search for videos
-                search_response = self.youtube.search().list(
+                if not qm.spend('search.list'):
+                    continue
+                search_kwargs = dict(
                     q=keyword,
                     part='id,snippet',
                     type='video',
                     maxResults=min(50, max_results * 3),  # Get extra to filter
                     order='viewCount',
                     relevanceLanguage='en'
-                ).execute()
-                
+                )
+                if published_after:
+                    search_kwargs['publishedAfter'] = published_after
+                search_response = self.youtube.search().list(**search_kwargs).execute()
+
                 video_ids = [item['id']['videoId'] for item in search_response['items']]
-                
+
                 # Get detailed stats
+                if not qm.spend('videos.list'):
+                    continue
                 videos_response = self.youtube.videos().list(
                     part='statistics,snippet',
                     id=','.join(video_ids)
@@ -83,12 +108,9 @@ class YouTubeResearcher:
                         })
                 
             except Exception as e:
-                err_str = str(e)
-                if 'quotaExceeded' in err_str:
-                    print(f"YouTube API quota exceeded — pausing all searches until reset")
-                    self._quota_exhausted = True
-                else:
-                    print(f"Error searching keyword '{keyword}': {e}")
+                if qm.handle_api_error(e):
+                    continue
+                print(f"Error searching keyword '{keyword}': {e}")
                 continue
         
         # Sort by likes and return top results
@@ -161,6 +183,10 @@ class YouTubeResearcher:
         Returns:
             Dict with current metrics
         """
+        qm = QuotaManager.get_instance()
+        if not qm.spend('videos.list'):
+            return None
+
         try:
             response = self.youtube.videos().list(
                 part='statistics,snippet',
@@ -189,5 +215,7 @@ class YouTubeResearcher:
             }
 
         except Exception as e:
+            if qm.handle_api_error(e):
+                return None
             print(f"Error getting video performance: {e}")
             return None
