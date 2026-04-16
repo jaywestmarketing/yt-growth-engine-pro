@@ -62,7 +62,8 @@ Config sections and keys (use `get_config` / `set_config`):
     view_protection_multiplier
   retry: first_check_hours, second_check_hours, max_attempts, delete_on_fail
   keywords: competitor_min_likes, competitors_to_analyze,
-    competitor_max_age_days (0 = no limit), keyword_aggressiveness
+    competitor_max_age_days (default 7 — look back one week; 0 = no limit),
+    keyword_aggressiveness
   comment_bot: enabled, comment_style, max_comments_per_video, delay_seconds
 
 Behaviour rules:

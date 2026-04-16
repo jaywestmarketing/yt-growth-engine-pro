@@ -280,8 +280,8 @@ class AutomationEngine:
         # 2. Research competitors
         min_likes = self.config['keywords']['competitor_min_likes']
         max_results = self.config['keywords']['competitors_to_analyze']
-        # 0 (or missing) = no age filter — keep backwards-compatible behaviour.
-        max_age_days = self.config['keywords'].get('competitor_max_age_days', 0)
+        # Default to 7 days so we focus on what's trending now. 0 = no limit.
+        max_age_days = self.config['keywords'].get('competitor_max_age_days', 7)
         competitors = self.youtube_researcher.search_competitors(
             keywords, min_likes, max_results, max_age_days=max_age_days
         )
