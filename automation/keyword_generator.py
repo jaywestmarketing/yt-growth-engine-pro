@@ -50,29 +50,37 @@ Keywords:"""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=500,
                 messages=[{
                     "role": "user",
                     "content": prompt
                 }]
             )
-            
+
             # Extract JSON from response
             response_text = message.content[0].text.strip()
-            
+
             # Remove markdown code blocks if present
             if response_text.startswith("```"):
                 response_text = response_text.split("```")[1]
                 if response_text.startswith("json"):
                     response_text = response_text[4:]
                 response_text = response_text.strip()
-            
+
             keywords = json.loads(response_text)
             return keywords
-            
+
         except Exception as e:
-            print(f"Error generating keywords: {e}")
+            err = str(e)
+            if 'credit' in err.lower() or 'billing' in err.lower() or 'expired' in err.lower() or '401' in err:
+                print(
+                    "Claude API key error — your Anthropic account may have run out "
+                    "of credits or the key has expired. Visit https://console.anthropic.com "
+                    "to top up your balance, then restart the app."
+                )
+            else:
+                print(f"Error generating keywords: {e}")
             # Fallback to basic keyword extraction
             return self._fallback_keywords(description)
     
@@ -136,7 +144,7 @@ Title:"""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=100,
                 messages=[{
                     "role": "user",
@@ -200,7 +208,7 @@ Description:"""
 
         try:
             message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=600,
                 messages=[{
                     "role": "user",

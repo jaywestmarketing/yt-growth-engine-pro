@@ -373,7 +373,7 @@ class ChatAgent:
     """Stateful chat agent backed by Claude with tool-use."""
 
     MAX_TOOL_ITERATIONS = 6  # hard cap to prevent infinite tool loops
-    MODEL = "claude-sonnet-4-5"
+    MODEL = "claude-sonnet-4-6"
     FALLBACK_MODELS = ["claude-sonnet-4-20250514"]
     MAX_HISTORY_TURNS = 20
 

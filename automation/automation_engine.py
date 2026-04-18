@@ -74,6 +74,11 @@ class AutomationEngine:
             if claude_key:
                 self.keyword_gen = KeywordGenerator(claude_key)
                 self.log("AI keyword generator initialized", "SUCCESS")
+            else:
+                self.log(
+                    "Claude API key not set. Add it in Settings → API Configuration.",
+                    "WARNING"
+                )
             
             # Performance Monitor (if all components ready)
             if self.youtube_researcher and self.youtube_uploader:
